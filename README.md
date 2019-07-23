@@ -5,16 +5,16 @@ Defenchess is a free, open source UCI chess engine written in C++. This project 
 
 ### Parameters
 * #### Hash
-  The size of the transposition table. (default 16MB)
+  The size of the transposition table in megabytes. (default 16)
 
 * #### Threads
   The number of threads used while searching. (default 1)
 
 * #### SyzygyPath
-  The path to the Syzygy Tablebase WDL/DTZ files. (default <empty>)
+  The path to the Syzygy Tablebase WDL/DTZ files. (default empty)
 
 * #### MoveOverhead
-  The minimum amount of time to be left on the clock while moving. Should be increased if the engine is losing on time. (default 100ms)
+  The minimum amount of time in milliseconds to be left on the clock while moving. Should be increased if the engine is losing on time. (default 100)
 
 
 ### Special thanks
