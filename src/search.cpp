@@ -39,6 +39,7 @@ struct timeval curr_time, start_ts;
 volatile bool is_timeout = false;
 int think_depth_limit = MAX_PLY;
 bool quit_application = false;
+bool volatile is_searching = false;
 
 Move main_pv[MAX_PLY + 1];
 std::vector<Move> root_moves = {};
@@ -761,6 +762,8 @@ void think(Position *p, std::vector<std::string> word_list) {
 
     std::thread threads[MAX_THREADS];
     initialize_nodes();
+
+    is_searching = true;
     for (int i = 0; i < num_threads; ++i) {
         SearchThread *t = &search_threads[i];
         threads[i] = std::thread(thread_think, t, in_check);
@@ -778,6 +781,7 @@ void think(Position *p, std::vector<std::string> word_list) {
     if (quit_application) {
         exit(EXIT_SUCCESS);
     }
+    is_searching = false;
 }
 
 void bench() {

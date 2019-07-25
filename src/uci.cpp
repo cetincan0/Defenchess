@@ -112,6 +112,10 @@ void debug() {
 }
 
 void quit() {
+    if (!is_searching) {
+        exit(EXIT_SUCCESS);
+    }
+
     is_timeout = true;
     quit_application = true;
 }

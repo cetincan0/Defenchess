@@ -42,6 +42,7 @@ extern int total_remaining;
 extern volatile bool is_timeout;
 extern int think_depth_limit;
 extern bool quit_application;
+extern volatile bool is_searching;
 
 extern struct timeval curr_time, start_ts;
 
