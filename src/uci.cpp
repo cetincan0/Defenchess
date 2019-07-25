@@ -80,7 +80,7 @@ bool word_equal(int index, string comparison_str) {
 }
 
 void uci() {
-    cout << "id name Defenchess 2.0 x64" << endl << "id author Can Cetin & Dogac Eldenk" << endl;
+    cout << "id name Defenchess 2.1 x64" << endl << "id author Can Cetin & Dogac Eldenk" << endl;
 #ifndef NDEBUG
     cout << "debug mode on" << std::endl;
 #endif
@@ -113,7 +113,7 @@ void debug() {
 
 void quit() {
     is_timeout = true;
-    exit(EXIT_SUCCESS);
+    quit_application = true;
 }
 
 void stop() {
@@ -273,7 +273,7 @@ void run_command(string s) {
 }
 
 void loop() {
-    cout << "Defenchess 2.0 x64 by Can Cetin and Dogac Eldenk" << endl;
+    cout << "Defenchess 2.1 x64 by Can Cetin and Dogac Eldenk" << endl;
 
     string in_str;
 #ifdef __TUNE__

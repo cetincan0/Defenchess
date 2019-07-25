@@ -17,10 +17,11 @@
 CC      = g++
 CFLAGS  = -DNDEBUG -Wall -Wcast-qual -Wextra -Wshadow -pedantic -std=c++11 -m64 -msse3 -mpopcnt -flto
 WFLAGS  = -DNDEBUG -Wall -Wcast-qual -Wextra -Wshadow -pedantic -std=c++11 -m64 -msse3 -mpopcnt
+OLDWFLAGS  = -DNDEBUG -Wall -Wcast-qual -Wextra -Wshadow -pedantic -std=c++11 -m64
 DFLAGS  = -g -Wall -Wcast-qual -Wextra -Wshadow -pedantic -std=c++11 -m64 -msse3 -mpopcnt -flto -D__DEBUG__
 TARGET  = Defenchess
 OPT     = -O3
-VERSION = 2.0
+VERSION = 2.1
 OBJECTS = bitboard.o data.o eval.o move.o move_utils.o params.o position.o pst.o search.o see.o target.o test.o timecontrol.o thread.o tt.o tune.o uci.o magic.o main.o movegen.o tb.o fathom/tbprobe.o
 
 all: $(TARGET)
@@ -32,7 +33,10 @@ $(TARGET): $(OBJECTS)
 	$(CC) $(CFLAGS) $(OPT) -c $^ -o $@ -pthread
 
 winrelease:
-	$(CC) $(WFLAGS) -static $(OPT) *.cpp fathom/tbprobe.cpp -o $(TARGET)_$(VERSION).exe
+	$(CC) $(WFLAGS) -static $(OPT) *.cpp fathom/tbprobe.cpp -o $(TARGET)_$(VERSION)_popcnt.exe
+
+oldwinrelease:
+	$(CC) $(OLDWFLAGS) -static $(OPT) *.cpp fathom/tbprobe.cpp -o $(TARGET)_$(VERSION)_nopopcnt.exe
 
 release: $(OBJECTS)
 	$(CC) $(CFLAGS) $(OPT) $^ -o $(TARGET)_$(VERSION) -pthread

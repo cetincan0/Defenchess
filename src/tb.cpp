@@ -29,7 +29,6 @@ void init_syzygy(std::string syzygy_path) {
     if (tb_initialized) {
         SYZYGY_LARGEST = int(TB_LARGEST);
     }
-
 }
 
 int result_to_wdl(unsigned result) {
@@ -62,7 +61,7 @@ int probe_syzygy_wdl(Position *p) {
         uint64_t(p->bbs[pawn(white)] | p->bbs[pawn(black)]),
         unsigned(p->info->last_irreversible),
         unsigned(p->info->castling),
-        unsigned(p->info->enpassant),
+        unsigned(p->info->enpassant == no_sq ? 0 : p->info->enpassant),
         !bool(p->color)
     );
     return result_to_wdl(result);
@@ -84,7 +83,7 @@ int probe_syzygy_dtz(Position *p, Move *move) {
         uint64_t(p->bbs[pawn(white)] | p->bbs[pawn(black)]),
         unsigned(p->info->last_irreversible),
         unsigned(p->info->castling),
-        unsigned(p->info->enpassant),
+        unsigned(p->info->enpassant == no_sq ? 0 : p->info->enpassant),
         !bool(p->color),
         nullptr
     );

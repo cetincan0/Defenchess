@@ -41,6 +41,7 @@ extern int myremain;
 extern int total_remaining;
 extern volatile bool is_timeout;
 extern int think_depth_limit;
+extern bool quit_application;
 
 extern struct timeval curr_time, start_ts;
 
@@ -56,13 +57,14 @@ inline int bench_time(struct timeval s, struct timeval e) {
 inline void init_time(Position *p, std::vector<std::string> word_list) {
     timer_count = 0;
     is_timeout = false;
-    think_depth_limit = MAX_PLY;
 
     if (word_list.size() <= 1) {
         myremain = 10000;
         total_remaining = 10000;
         return;
     }
+
+    think_depth_limit = MAX_PLY;
 
     if (word_list[1] == "movetime") {
         myremain = stoi(word_list[2]) * 99 / 100;

@@ -38,6 +38,7 @@ int total_remaining = 10000;
 struct timeval curr_time, start_ts;
 volatile bool is_timeout = false;
 int think_depth_limit = MAX_PLY;
+bool quit_application = false;
 
 Move main_pv[MAX_PLY + 1];
 std::vector<Move> root_moves = {};
@@ -773,6 +774,10 @@ void think(Position *p, std::vector<std::string> word_list) {
     gettimeofday(&curr_time, nullptr);
     std::cout << "info time " << time_passed() << std::endl;
     std::cout << "bestmove " << move_to_str(main_pv[0]) << std::endl;
+
+    if (quit_application) {
+        exit(EXIT_SUCCESS);
+    }
 }
 
 void bench() {
