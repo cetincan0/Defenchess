@@ -80,7 +80,7 @@ bool word_equal(int index, string comparison_str) {
 }
 
 void uci() {
-    cout << "id name Defenchess 2.1 x64" << endl << "id author Can Cetin & Dogac Eldenk" << endl;
+    cout << "id name Defenchess 2.2 x64" << endl << "id author Can Cetin & Dogac Eldenk" << endl;
 #ifndef NDEBUG
     cout << "debug mode on" << std::endl;
 #endif
@@ -102,7 +102,7 @@ void perft() {
 
 void debug() {
     cout << bitstring(root_position->board);
-    Metadata *md = &search_threads[0].metadatas[2];
+    Metadata *md = &main_thread.metadatas[2];
     MoveGen movegen = new_movegen(root_position, md, no_move, NORMAL_SEARCH, 0, is_checked(root_position));
     Move move;
     while ((move = next_move(&movegen, md, 0)) != no_move) {
@@ -232,6 +232,27 @@ void setoption() {
     }
 }
 
+void so() {
+    // Quick set option without name and value
+    string name = word_list[1];
+    string value = word_list[2];
+
+    if (name == "Hash") {
+        int mb = stoi(value);
+        if (!mb || more_than_one(uint64_t(mb))) {
+            cout << "info Hash value needs to be a power of 2!" << endl;
+        }
+        reset_tt(mb);
+    } else if (name == "Threads") {
+        num_threads = std::min(MAX_THREADS, stoi(value));
+        reset_threads();
+    } else if (name == "SyzygyPath") {
+        init_syzygy(value);
+    } else if (name == "MoveOverhead") {
+        move_overhead = stoi(value);
+    }
+}
+
 void ucinewgame() {
     clear_threads();
     clear_tt();
@@ -250,6 +271,8 @@ void run_command(string s) {
         go();
     if (s == "setoption")
         setoption();
+    if (s == "so")
+        so();
     if (s == "isready")
         isready();
     if (s == "uci")
@@ -277,7 +300,7 @@ void run_command(string s) {
 }
 
 void loop() {
-    cout << "Defenchess 2.1 x64 by Can Cetin and Dogac Eldenk" << endl;
+    cout << "Defenchess 2.2 x64 by Can Cetin and Dogac Eldenk" << endl;
 
     string in_str;
 #ifdef __TUNE__

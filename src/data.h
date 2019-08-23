@@ -82,22 +82,27 @@ bool scored_move_compare_greater(ScoredMove lhs, ScoredMove rhs);
 
 inline bool is_main_thread(Position *p) {return p->my_thread->thread_id == 0;}
 
+extern SearchThread main_thread;
 extern SearchThread *search_threads;
+
+inline SearchThread *get_thread(int thread_id) { return thread_id == 0 ? &main_thread : &search_threads[thread_id - 1]; }
 
 extern int num_threads;
 extern int move_overhead;
 
 inline void initialize_nodes() {
     for (int i = 0; i < num_threads; ++i) {
-        search_threads[i].nodes = 0;
-        search_threads[i].tb_hits = 0;
+        SearchThread *t = get_thread(i);
+        t->nodes = 0;
+        t->tb_hits = 0;
     }
 }
 
 inline uint64_t sum_nodes() {
     uint64_t s = 0;
     for (int i = 0; i < num_threads; ++i) {
-        s += search_threads[i].nodes;
+        SearchThread *t = get_thread(i);
+        s += t->nodes;
     }
     return s;
 }
@@ -105,7 +110,8 @@ inline uint64_t sum_nodes() {
 inline uint64_t sum_tb_hits() {
     uint64_t s = 0;
     for (int i = 0; i < num_threads; ++i) {
-        s += search_threads[i].tb_hits;
+        SearchThread *t = get_thread(i);
+        s += t->tb_hits;
     }
     return s;
 }

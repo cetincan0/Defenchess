@@ -18,9 +18,17 @@
 
 #include "data.h"
 #include "uci.h"
+#include "search.h"
+#include "thread.h"
 
-int main() {
+int main(int argc, char* argv[]) {
     init();
+    get_ready();
+    if (argc > 1 && strcmp(argv[1], "bench") == 0) {
+        // Calling bench exits the program
+        bench();
+        return 0;
+    }
     loop();
     return 0;
 }

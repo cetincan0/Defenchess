@@ -36,15 +36,16 @@ inline int lmr(bool is_pv, int depth, int num_moves) {
     return reductions[is_pv][std::min(depth, 63)][std::min(num_moves, 63)];
 }
 
-extern uint8_t timer_count;
-extern int myremain;
-extern int total_remaining;
-extern volatile bool is_timeout;
-extern int think_depth_limit;
-extern bool quit_application;
-extern volatile bool is_searching;
-
 extern struct timeval curr_time, start_ts;
+
+extern int timer_count,
+           myremain,
+           total_remaining,
+           think_depth_limit;
+
+extern volatile bool is_timeout,
+                     quit_application,
+                     is_searching;
 
 inline int time_passed() {
     return (((curr_time.tv_sec - start_ts.tv_sec) * 1000000) + (curr_time.tv_usec - start_ts.tv_usec)) / 1000;
@@ -56,7 +57,7 @@ inline int bench_time(struct timeval s, struct timeval e) {
 
 
 inline void init_time(Position *p, std::vector<std::string> word_list) {
-    timer_count = 0;
+    timer_count = 1024;
     is_timeout = false;
 
     if (word_list.size() <= 1) {
@@ -98,15 +99,14 @@ inline void init_time(Position *p, std::vector<std::string> word_list) {
                 moves_to_go = stoi(word_list[i + 1]);
         }
 
-        if (white_remaining > 0 || black_remaining > 0) {
-            TTime t = get_myremain(
-                p->color == white ? white_increment : black_increment,
-                p->color == white ? white_remaining : black_remaining,
-                moves_to_go
-            );
-            myremain = t.optimum_time;
-            total_remaining = t.maximum_time;
-        }
+        TTime t = get_myremain(
+            p->color == white ? white_increment : black_increment,
+            p->color == white ? white_remaining : black_remaining,
+            moves_to_go,
+            p->my_thread->root_ply
+        );
+        myremain = t.optimum_time;
+        total_remaining = t.maximum_time;
     }
 }
 

@@ -66,6 +66,7 @@ uint64_t polyglotCombined[NUM_PIECE][64];
 int num_threads = 1;
 int move_overhead = 100;
 
+SearchThread main_thread;
 SearchThread *search_threads;
 
 int mvvlva_values[12][NUM_PIECE];
@@ -467,11 +468,8 @@ void init_imbalance(){
         int all_minor = white_minor + black_minor;
         int all_major = white_major + black_major;
         bool no_pawns = wp == 0 && bp == 0;
-        bool only_one_pawn = wp + bp == 1;
 
-        // Default endgame and scaling factor types
         material->endgame_type = NORMAL_ENDGAME;
-        material->scaling_factor_type = NO_SCALING;
 
         if (wp + bp + all_minor + all_major == 0) {
             material->endgame_type = DRAW_ENDGAME;
@@ -481,15 +479,6 @@ void init_imbalance(){
         }
         else if (no_pawns && all_major == 0 && all_minor == 2 && (wn == 2 || bn == 2)) {
             material->endgame_type = DRAW_ENDGAME;
-        }
-        else if (only_one_pawn && !all_minor && !all_major) {
-            material->endgame_type = KNOWN_ENDGAME_KPK;
-        }
-        else if (no_pawns && !all_minor && all_major == 1) {
-            material->endgame_type = KNOWN_ENDGAME_KXK;
-        }
-        else if (br == 1 && wr == 1 && only_one_pawn && !all_minor && wq == 0 && bq == 0) {
-            material->scaling_factor_type = KRPKR_SCALING;
         }
                                         }
                                     }

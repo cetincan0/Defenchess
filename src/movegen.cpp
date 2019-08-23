@@ -34,21 +34,21 @@ void print_movegen(MoveGen *movegen) {
     std::cout << std::endl;
 }
 
-void score_moves(MoveGen *movegen, ScoreType score_type) {
+void score_moves(MoveGen *movegen, Metadata *md, ScoreType score_type) {
     if (score_type == SCORE_CAPTURE) {
         for (uint8_t i = movegen->head; i < movegen->tail; ++i) {
             movegen->moves[i].score = score_capture_mvvlva(movegen->position, movegen->moves[i].move);
         }
     } else if (score_type == SCORE_QUIET) {
         for (uint8_t i = movegen->head; i < movegen->tail; ++i) {
-            movegen->moves[i].score = score_quiet(movegen, movegen->moves[i].move);
+            movegen->moves[i].score = score_quiet(movegen->position, md, movegen->moves[i].move);
         }
     } else { // Evasions
         for (uint8_t i = movegen->head; i < movegen->tail; ++i) {
             if (is_capture(movegen->position, movegen->moves[i].move)) {
                 movegen->moves[i].score = score_capture_mvvlva(movegen->position, movegen->moves[i].move);
             } else {
-                movegen->moves[i].score = score_quiet(movegen, movegen->moves[i].move) - (1 << 20);
+                movegen->moves[i].score = score_quiet(movegen->position, md, movegen->moves[i].move) - (1 << 20);
             }
         }
     }
@@ -79,7 +79,7 @@ Move next_move(MoveGen *movegen, Metadata *md, int depth) {
 
         case GOOD_CAPTURES_SORT:
             generate_moves<CAPTURE>(movegen, movegen->position);
-            score_moves(movegen, SCORE_CAPTURE);
+            score_moves(movegen, md, SCORE_CAPTURE);
             ++movegen->stage;
             /* fallthrough */
 
@@ -135,7 +135,7 @@ Move next_move(MoveGen *movegen, Metadata *md, int depth) {
         case QUIETS_SORT:
             movegen->head = movegen->tail = movegen->end_bad_captures;
             generate_moves<SILENT>(movegen, movegen->position);
-            score_moves(movegen, SCORE_QUIET);
+            score_moves(movegen, md, SCORE_QUIET);
             insertion_sort(movegen->moves, movegen->head, movegen->tail);
             ++movegen->stage;
             /* fallthrough */
@@ -165,7 +165,7 @@ Move next_move(MoveGen *movegen, Metadata *md, int depth) {
 
         case EVASIONS_SORT:
             generate_evasions(movegen, movegen->position);
-            score_moves(movegen, SCORE_EVASION);
+            score_moves(movegen, md, SCORE_EVASION);
             ++movegen->stage;
             /* fallthrough */
 
@@ -181,7 +181,7 @@ Move next_move(MoveGen *movegen, Metadata *md, int depth) {
 
         case QUIESCENCE_CAPTURES_SORT:
             generate_moves<CAPTURE>(movegen, movegen->position);
-            score_moves(movegen, SCORE_CAPTURE);
+            score_moves(movegen, md, SCORE_CAPTURE);
             ++movegen->stage;
             /* fallthrough */
 
@@ -216,7 +216,7 @@ Move next_move(MoveGen *movegen, Metadata *md, int depth) {
 
         case PROBCUT_CAPTURES_SORT:
             generate_moves<CAPTURE>(movegen, movegen->position);
-            score_moves(movegen, SCORE_CAPTURE);
+            score_moves(movegen, md, SCORE_CAPTURE);
             ++movegen->stage;
             /* fallthrough */
 
@@ -256,21 +256,19 @@ MoveGen new_movegen(Position *p, Metadata *md, Move tte_move, uint8_t type, int 
         }
     }
 
-    Move prev_move = (md-1)->current_move;
-    Square prev_to = move_to(prev_move);
+    Square prev_to = move_to((md-1)->current_move);
     MoveGen movegen = {
         {}, // Moves
         p, // Position
         tm, // tte_move
         p->my_thread->counter_moves[p->pieces[prev_to]][prev_to], // counter move
-        prev_move, // prev move
         movegen_stage, // stage
         0, // head
         0, // tail
         0, // end bad captures
         threshold // threshold
     };
-    assert(!(md->ply == 0 && prev_move != no_move));
+    assert(!(md->ply == 0 && (md-1)->current_move != no_move));
     return movegen;
 }
 

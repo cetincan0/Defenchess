@@ -21,6 +21,26 @@
 
 #include "const.h"
 
+const Bitboard flank_ranks[2] = {
+    RANK_1BB | RANK_2BB | RANK_3BB | RANK_4BB,
+    RANK_8BB | RANK_7BB | RANK_6BB | RANK_5BB
+};
+
+const Bitboard queenside_flank = FILE_ABB | FILE_BBB | FILE_CBB | FILE_DBB;
+const Bitboard center_flank = FILE_CBB | FILE_DBB | FILE_EBB | FILE_FBB;
+const Bitboard kingside_flank = FILE_EBB | FILE_FBB | FILE_GBB | FILE_HBB;
+
+const Bitboard flank_files[8] = {
+    queenside_flank,
+    queenside_flank,
+    queenside_flank,
+    center_flank,
+    center_flank,
+    kingside_flank,
+    kingside_flank,
+    kingside_flank
+};
+
 int evaluate(Position *p);
 
 #endif

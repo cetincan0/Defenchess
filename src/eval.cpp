@@ -134,28 +134,36 @@ void evaluate_pawns(Evaluation *eval, Position *p) {
 Score evaluate_pieces(Evaluation *eval, Position *p, Color color) {
     Score piece_score = {0, 0};
 
+    Bitboard capturable, king_threats;
+
     Bitboard my_bishops = p->bbs[bishop(color)];
     Bitboard my_knights = p->bbs[knight(color)];
     Bitboard my_rooks = p->bbs[rook(color)];
     Bitboard my_queens = p->bbs[queen(color)];
     Bitboard pinned = p->info->pinned[color];
 
+    Bitboard opponent_bishops = p->bbs[bishop(~color)];
+    Bitboard opponent_knights = p->bbs[knight(~color)];
+    Bitboard opponent_rooks = p->bbs[rook(~color)];
+    Bitboard opponent_queens = p->bbs[queen(~color)];
+
     eval->targets[bishop(color)] = 0;
     while (my_bishops) {
         Square sq = pop(&my_bishops);
         Bitboard bishop_targets = generate_bishop_targets(p->board ^ p->bbs[queen(color)], sq);
         if (pinned & bfi[sq]) {
-            bishop_targets &= BETWEEN_MASK[p->king_index[color]][sq];
+            bishop_targets &= FROMTO_MASK[p->king_index[color]][sq];
         }
 
-        int mobility = count(bishop_targets & eval->mobility_area[color]);
+        capturable = opponent_bishops | opponent_rooks | opponent_queens;
+        int mobility = count(bishop_targets & (eval->mobility_area[color] | capturable));
         piece_score += mobility_bonus[BISHOP][mobility];
 
         // Bishop with same colored pawns
         piece_score -= bishop_pawn_penalty * count(COLOR_MASKS[TILE_COLOR[sq]] & p->bbs[pawn(color)]);
 
         // King threats
-        Bitboard king_threats = bishop_targets & eval->king_zone[~color];
+        king_threats = bishop_targets & eval->king_zone[~color];
         if (king_threats) {
             ++eval->num_king_attackers[~color];
             eval->king_zone_score[~color] += ATTACK_VALUES[BISHOP];
@@ -171,14 +179,16 @@ Score evaluate_pieces(Evaluation *eval, Position *p, Color color) {
         Bitboard knight_targets = generate_knight_targets(sq);
 
         if (pinned & bfi[sq]) {
-            knight_targets &= BETWEEN_MASK[p->king_index[color]][sq];
+            // Pinned knights cannot move
+            knight_targets = 0;
         }
 
-        int mobility = count(knight_targets & eval->mobility_area[color]);
+        capturable = opponent_knights | opponent_bishops | opponent_rooks | opponent_queens;
+        int mobility = count(knight_targets & (eval->mobility_area[color] | capturable));
         piece_score += mobility_bonus[KNIGHT][mobility];
 
         // King threats
-        Bitboard king_threats = knight_targets & eval->king_zone[~color];
+        king_threats = knight_targets & eval->king_zone[~color];
         if (king_threats) {
             ++eval->num_king_attackers[~color];
             eval->king_zone_score[~color] += ATTACK_VALUES[KNIGHT];
@@ -194,10 +204,11 @@ Score evaluate_pieces(Evaluation *eval, Position *p, Color color) {
         Bitboard rook_targets = generate_rook_targets(p->board ^ (p->bbs[queen(color)] | p->bbs[rook(color)]), sq);
 
         if (pinned & bfi[sq]) {
-            rook_targets &= BETWEEN_MASK[p->king_index[color]][sq];
+            rook_targets &= FROMTO_MASK[p->king_index[color]][sq];
         }
 
-        int mobility = count(rook_targets & eval->mobility_area[color]);
+        capturable = opponent_rooks | opponent_queens;
+        int mobility = count(rook_targets & (eval->mobility_area[color] | capturable));
         piece_score += mobility_bonus[ROOK][mobility];
 
         // Bonus for being on a semiopen or open file
@@ -206,7 +217,7 @@ Score evaluate_pieces(Evaluation *eval, Position *p, Color color) {
         }
 
         // King threats
-        Bitboard king_threats = rook_targets & eval->king_zone[~color];
+        king_threats = rook_targets & eval->king_zone[~color];
         if (king_threats) {
             ++eval->num_king_attackers[~color];
             eval->king_zone_score[~color] += ATTACK_VALUES[ROOK];
@@ -222,14 +233,15 @@ Score evaluate_pieces(Evaluation *eval, Position *p, Color color) {
         Bitboard queen_targets = generate_queen_targets(p->board, sq);
 
         if (pinned & bfi[sq]) {
-            queen_targets &= BETWEEN_MASK[p->king_index[color]][sq];
+            queen_targets &= FROMTO_MASK[p->king_index[color]][sq];
         }
 
-        int mobility = count(queen_targets & eval->mobility_area[color]);
+        capturable = opponent_queens;
+        int mobility = count(queen_targets & (eval->mobility_area[color] | capturable));
         piece_score += mobility_bonus[QUEEN][mobility];
 
         // King threats
-        Bitboard king_threats = queen_targets & eval->king_zone[~color];
+        king_threats = queen_targets & eval->king_zone[~color];
         if (king_threats) {
             ++eval->num_king_attackers[~color];
             eval->king_zone_score[~color] += ATTACK_VALUES[QUEEN];
@@ -255,6 +267,10 @@ Score evaluate_king(Evaluation *eval, Position *p, Color color) {
         while (!(DISTANCE_RING[king_sq][pawn_distance++] & p->bbs[pawn(color)])) {}
         king_score.endgame -= pawn_distance_penalty * pawn_distance;
     }
+
+    Bitboard flank_attacks = eval->targets[~color] & flank_ranks[color] & flank_files[file_of(king_sq)];
+    Bitboard flank_attacks2 = flank_attacks & eval->double_targets[~color];
+    king_score.midgame -= king_flank_penalty * (count(flank_attacks) + count(flank_attacks2));
 
     if (eval->num_king_attackers[color] > (1 - eval->num_queens[~color])) {
         Bitboard weak = eval->targets[king(color)] & eval->targets[~color] & ~eval->double_targets[color];
@@ -307,23 +323,29 @@ Score evaluate_threat(Evaluation *eval, Position *p, Color color) {
     Bitboard very_supported = eval->targets[pawn(~color)] | (eval->double_targets[~color] & ~eval->double_targets[color]);
     Bitboard not_supported = p->bbs[~color] & ~very_supported & eval->targets[color];
 
+    Bitboard attacked;
     if (opponent_non_pawns | not_supported) {
-        Bitboard attacked_by_minor = (opponent_non_pawns | not_supported) & (eval->targets[knight(color)] | eval->targets[bishop(color)]);
-        while (attacked_by_minor) {
-            Square sq = pop(&attacked_by_minor);
+        attacked = (opponent_non_pawns | not_supported) & (eval->targets[knight(color)] | eval->targets[bishop(color)]);
+        while (attacked) {
+            Square sq = pop(&attacked);
             threat_score += minor_threat_bonus[piece_type(p->pieces[sq])];
         }
 
-        Bitboard attacked_by_rook = (p->bbs[queen(~color)] | not_supported) & eval->targets[rook(color)];
-        while (attacked_by_rook) {
-            Square sq = pop(&attacked_by_rook);
+        attacked = (p->bbs[queen(~color)] | not_supported) & eval->targets[rook(color)];
+        while (attacked) {
+            Square sq = pop(&attacked);
             threat_score += rook_threat_bonus[piece_type(p->pieces[sq])];
         }
 
-        Bitboard attacked_by_pawn = opponent_non_pawns & eval->targets[pawn(color)];
-        while (attacked_by_pawn) {
-            Square sq = pop(&attacked_by_pawn);
+        attacked = opponent_non_pawns & eval->targets[pawn(color)];
+        while (attacked) {
+            Square sq = pop(&attacked);
             threat_score += pawn_threat_bonus[piece_type(p->pieces[sq])];
+        }
+
+        attacked = not_supported & eval->targets[king(color)];
+        if (attacked) {
+            threat_score += king_threat_bonus[more_than_one(attacked)];
         }
     }
 
@@ -405,6 +427,25 @@ void pre_eval(Evaluation *eval, Position *p) {
     eval->num_queens[white] = eval->num_queens[black] = 0;
 }
 
+int scaling_factor(Position *p) {
+    if (only_one(p->bbs[white_bishop]) &&
+            only_one(p->bbs[black_bishop]) &&
+            only_one(COLOR_MASKS[white] & (p->bbs[white_bishop] | p->bbs[black_bishop]))) {
+        if (p->info->non_pawn_material[white] == BISHOP_MID && p->info->non_pawn_material[black] == BISHOP_MID) {
+            return SCALE_PURE_OCB;
+        } else {
+            return SCALE_OCB_WITH_PIECES;
+        }
+    }
+
+    Color winner = p->score.endgame > 0 ? white : black;
+    if (!p->bbs[pawn(winner)] && p->info->non_pawn_material[winner] <= p->info->non_pawn_material[~winner] + piece_values[white_bishop]) {
+        return SCALE_NO_PAWNS;
+    }
+
+    return SCALE_NORMAL;
+}
+
 int evaluate(Position *p) {
     assert(!is_checked(p));
     Evaluation eval;
@@ -426,6 +467,7 @@ int evaluate(Position *p) {
                   evaluate_threat(&eval, p, white) - evaluate_threat(&eval, p, black) +
                   evaluate_passers(&eval, p, white) - evaluate_passers(&eval, p, black);
 
-    int ret = (eval.score.midgame * eval_material->phase + eval.score.endgame * (256 - eval_material->phase)) / 256;
+    int scale = scaling_factor(p);
+    int ret = (eval.score.midgame * eval_material->phase + eval.score.endgame * (256 - eval_material->phase) * scale / SCALE_NORMAL) / 256;
     return (p->color == white ? ret : -ret) + tempo;
 }

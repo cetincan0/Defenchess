@@ -67,7 +67,7 @@ void single_error(int thread_id) {
             continue;
         }
 
-        Metadata *md = &p->my_thread->metadatas[0];
+        Metadata *md = &p->my_thread->metadatas[2];
         md->current_move = no_move;
         md->static_eval = UNDEFINED;
         md->ply = 0;
@@ -277,7 +277,6 @@ void tune() {
                 if (new_error < best_error) {
                     best_error = new_error;
                     best_guess = new_guess;
-                    best_guess[pi].increasing = true;
                     improving = true;
                     cout << new_guess[pi].name << "[" << new_guess[pi].value << "]:\t" << new_error << " (best)" << endl;
                     best_guess[pi].stability = 1;
@@ -292,7 +291,7 @@ void tune() {
                 if (new_error < best_error) {
                     best_error = new_error;
                     best_guess = new_guess;
-                    best_guess[pi].increasing = false;
+                    best_guess[pi].increasing = !best_guess[pi].increasing;
                     improving = true;
                     cout << new_guess[pi].name << "[" << new_guess[pi].value << "]:\t" << new_error << " (best)" << endl;
                     best_guess[pi].stability = 1;
@@ -319,33 +318,6 @@ void tune() {
 }
 
 void init_mobility(vector<Parameter> &parameters) {
-    for (int i = 0; i < 4; ++i) {
-        for (int j = RANK_1; j < RANK_8; ++j) {
-            parameters.push_back({&pawn_shelter[i][j], pawn_shelter[i][j], "pawn_shelter[" + to_string(i) + "][" + to_string(j) + "]", true, 1});
-        }
-    }
-    for (int b = 0; b <= 1; ++b) {
-        for (int i = 0; i < 4; ++i) {
-            for (int j = (b ? 2 : 0); j < 8; ++j) {
-                parameters.push_back({&pawn_storm[b][i][j], pawn_storm[b][i][j], "pawn_storm[" + to_string(b) + "][" + to_string(i) + "][" + to_string(j) + "]", true, 1});
-            }
-        }
-    }
-    return;
-
-    for (int o = 0; o <= 1; ++o) {
-        for (int adj = 0; adj <= 1; ++adj) {
-            for (int i = RANK_2; i < RANK_8; ++i) {
-                if ((o && i == RANK_7) || (!adj && i == RANK_2)) {
-                    continue;
-                }
-                parameters.push_back({&connected_bonus[o][adj][i].midgame, connected_bonus[o][adj][i].midgame, "connected_bonus[" + to_string(o) + "][" + to_string(adj) + "][" + to_string(i) + "].midgame", true, 1});
-                parameters.push_back({&connected_bonus[o][adj][i].endgame, connected_bonus[o][adj][i].endgame, "connected_bonus[" + to_string(o) + "][" + to_string(adj) + "][" + to_string(i) + "].endgame", true, 1});
-            }
-        }
-    }
-    return;
-
     for (int i = 0; i <= 8; ++i) {
         parameters.push_back({&mobility_bonus[KNIGHT][i].midgame, mobility_bonus[KNIGHT][i].midgame, "mobility_bonus[KNIGHT][" + to_string(i) + "].midgame", true, 1});
         parameters.push_back({&mobility_bonus[KNIGHT][i].endgame, mobility_bonus[KNIGHT][i].endgame, "mobility_bonus[KNIGHT][" + to_string(i) + "].endgame", true, 1});
@@ -406,6 +378,9 @@ void init_pst(vector<Parameter> &parameters) {
 }
 
 void init_parameters(vector<Parameter> &parameters) {
+    parameters.push_back({&SCALE_NO_PAWNS, SCALE_NO_PAWNS, "SCALE_NO_PAWNS", true, 1});
+    return;
+
     // DO NOT TUNE THIS parameters.push_back({&PAWN_MID, PAWN_MID, "PAWN_MID", true});
     parameters.push_back({&PAWN_END, PAWN_END, "PAWN_END", true, 1});
 

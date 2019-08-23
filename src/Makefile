@@ -21,7 +21,7 @@ OLDWFLAGS  = -DNDEBUG -Wall -Wcast-qual -Wextra -Wshadow -pedantic -std=c++11 -m
 DFLAGS  = -g -Wall -Wcast-qual -Wextra -Wshadow -pedantic -std=c++11 -m64 -msse3 -mpopcnt -flto -D__DEBUG__
 TARGET  = Defenchess
 OPT     = -O3
-VERSION = 2.1
+VERSION = 2.2
 OBJECTS = bitboard.o data.o eval.o move.o move_utils.o params.o position.o pst.o search.o see.o target.o test.o timecontrol.o thread.o tt.o tune.o uci.o magic.o main.o movegen.o tb.o fathom/tbprobe.o
 
 all: $(TARGET)

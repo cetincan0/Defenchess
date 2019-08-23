@@ -188,14 +188,15 @@ const uint64_t _knight_targets = 0x0000005088008850;
 const uint64_t _king_targets  = 0x0000000070507000;
 
 const int
-    KNOWN_WIN = 10000,
     MATE = 32000,
     INFINITE = 32001,
     UNDEFINED = 32002,
     TIMEOUT = 32003,
 
     MATE_IN_MAX_PLY = MATE - MAX_PLY,
-    MATED_IN_MAX_PLY = -MATE + MAX_PLY;
+    MATED_IN_MAX_PLY = -MATE + MAX_PLY,
+
+    TB_WIN = MATE_IN_MAX_PLY - MAX_PLY - 1;
 
 const int RANK_1 = 0,
           RANK_2 = 1,
@@ -307,12 +308,13 @@ typedef struct CopiedInfo {
 const int info_size = sizeof(CopiedInfo);
 
 typedef struct Metadata {
-    int  ply;
-    Move current_move;
-    int  static_eval;
-    Move killers[2];
-    Move pv[MAX_PLY + 1];
-    Move excluded_move;
+    int   ply;
+    Move  current_move;
+    int   static_eval;
+    Move  killers[2];
+    Move  pv[MAX_PLY + 1];
+    Move  excluded_move;
+    Piece moved_piece;
 } Metadata;
 
 struct Position {
@@ -353,14 +355,7 @@ typedef struct Evaluation {
 
 enum EndgameType {
     NORMAL_ENDGAME,
-    DRAW_ENDGAME,
-    KNOWN_ENDGAME_KPK,
-    KNOWN_ENDGAME_KXK
-};
-
-enum ScalingFactorType {
-    NO_SCALING,
-    KRPKR_SCALING
+    DRAW_ENDGAME
 };
 
 const int SCALE_NORMAL = 32;
@@ -369,7 +364,6 @@ typedef struct Material {
     int               phase;
     int               score;
     EndgameType       endgame_type;
-    ScalingFactorType scaling_factor_type;
 } Material;
 
 const int material_balance[NUM_PIECE] ={
@@ -443,7 +437,6 @@ struct MoveGen {
     Position   *position;
     Move       tte_move;
     Move       counter_move;
-    Move       prev_move;
     int        stage;
     uint8_t    head;
     uint8_t    tail;
@@ -456,7 +449,6 @@ const MoveGen blank_movegen = {
     nullptr, // Position
     no_move, // tte_move
     no_move, // counter move
-    no_move, // prev move
     0, // stage
     0, // head
     0, // tail
@@ -474,6 +466,7 @@ struct SearchThread {
     Move        counter_moves[NUM_PIECE][64];
     int         history[2][64][64];
     int         counter_move_history[NUM_PIECE][64][NUM_PIECE][64];
+    int         followup_history[NUM_PIECE][64][NUM_PIECE][64];
     int         selply;
     PawnTTEntry pawntt[pawntt_size];
     int         depth;

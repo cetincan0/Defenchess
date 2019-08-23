@@ -48,6 +48,10 @@ inline bool more_than_one(Bitboard b) {
   return b & (b - 1);
 }
 
+inline bool only_one(Bitboard b) {
+  return b && !more_than_one(b);
+}
+
 inline Bitboard shift(Bitboard b, int offset) {
     if (offset > 0) {
         return b << offset;

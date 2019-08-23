@@ -194,7 +194,7 @@ uint64_t fastPerft(int depth, Position *p, bool root, bool in_check) {
     uint64_t move_nodes = 0, nodes = 0;
     const bool is_leaf = depth == 2;
 
-    Metadata *md = &p->my_thread->metadatas[0];
+    Metadata *md = &p->my_thread->metadatas[2];
     MoveGen movegen = new_movegen(p, md, no_move, NORMAL_SEARCH, 0, in_check);
     Move move;
     while ((move = next_move(&movegen, md, 0)) != no_move) {
@@ -260,7 +260,7 @@ uint64_t Perft(int depth, Position *p, bool root, bool in_check) {
     }
     uint64_t move_nodes = 0, nodes = 0;
 
-    Metadata *md = &p->my_thread->metadatas[0];
+    Metadata *md = &p->my_thread->metadatas[2];
     MoveGen movegen = new_movegen(p, md, no_move, NORMAL_SEARCH, 0, in_check);
     Move move;
     while ((move = next_move(&movegen, md, 0)) != no_move) {

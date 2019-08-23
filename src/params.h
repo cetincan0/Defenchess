@@ -41,6 +41,7 @@ extern int
     king_danger_init,
     king_danger_weak_penalty,
     king_danger_weak_zone_penalty,
+    king_flank_penalty,
     queen_check_penalty,
     knight_check_penalty,
     rook_check_penalty,
@@ -54,6 +55,10 @@ extern int pawn_shelter[4][8],
 extern int tempo;
 extern int ATTACK_VALUES[6];
 extern int bishop_pair;
+
+extern int SCALE_PURE_OCB;
+extern int SCALE_OCB_WITH_PIECES;
+extern int SCALE_NO_PAWNS;
 
 extern Score connected_bonus[2][2][8];
 extern Score mobility_bonus[6][32];
@@ -70,6 +75,7 @@ extern Score pawn_push_threat_bonus;
 extern Score minor_threat_bonus[6];
 extern Score rook_threat_bonus[6];
 extern Score pawn_threat_bonus[6];
+extern Score king_threat_bonus[2];
 
 extern Score pst[NUM_PIECE][64];
 

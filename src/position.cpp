@@ -147,12 +147,12 @@ Position* import_fen(std::string fen, int thread_id){
         halfmove_clock = 1;
     }
 
-    SearchThread *main_thread = &search_threads[thread_id];
-    main_thread->root_ply = 2 * (halfmove_clock - 1) + color;
-    Info *info = &main_thread->infos[main_thread->root_ply];
-    Position *p = &main_thread->position;
+    SearchThread *t = get_thread(thread_id);
+    t->root_ply = 2 * (halfmove_clock - 1) + color;
+    Info *info = &t->infos[t->root_ply];
+    Position *p = &t->position;
     p->info = info;
-    main_thread->search_ply = main_thread->root_ply;
+    t->search_ply = t->root_ply;
     p->color = color;
 
     p->bbs[white_occupy] = 0;
@@ -274,14 +274,13 @@ Position* import_fen(std::string fen, int thread_id){
     calculate_score(p);
     calculate_hash(p);
     calculate_material(p);
-    p->my_thread = main_thread;
+    p->my_thread = t;
     return p;
 }
 
 Position* start_pos(){
-    SearchThread *main_thread = &search_threads[0];
-    Info *info = &main_thread->infos[0];
-    Position *p = &main_thread->position;
+    Info *info = &main_thread.infos[0];
+    Position *p = &main_thread.position;
     p->info = info;
 
     Bitboard white_occupied_bb = 0x000000000000FFFF;
@@ -326,14 +325,14 @@ Position* start_pos(){
     info->castling = 15;
     info->enpassant = no_sq;
     info->hash = info->pawn_hash = 0;
-    main_thread->search_ply = main_thread->root_ply = 0;
+    main_thread.search_ply = main_thread.root_ply = 0;
     info->pinned[white] = pinned_piece_squares(p, white);
     info->pinned[black] = pinned_piece_squares(p, black);
     info->previous = nullptr;
     calculate_score(p);
     calculate_hash(p);
     calculate_material(p);
-    p->my_thread = main_thread;
+    p->my_thread = &main_thread;
     info->last_irreversible = 0;
     return p;
 }

@@ -26,6 +26,6 @@ typedef struct TTime {
     int maximum_time;
 } TTime;
 
-TTime get_myremain(int increment, int remaining, int movestogo);
+TTime get_myremain(int increment, int remaining, int movestogo, int root_ply);
 
 #endif
