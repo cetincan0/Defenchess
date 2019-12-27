@@ -29,7 +29,7 @@ TTime moves_in_time(int increment, int remaining, int movestogo, int root_ply){
     int max_usage = std::min(spend * 6, (remaining - move_overhead) / 4);
 
     if (max_usage < increment) {
-        max_usage = remaining > 2 * move_overhead ? remaining - 2 * move_overhead : remaining - 1;
+        max_usage = remaining > move_overhead ? remaining - move_overhead : remaining - 1;
     }
 
     return {spend, max_usage};
@@ -47,7 +47,7 @@ TTime no_movestogo(int increment, int remaining, int root_ply) {
     int max_usage = std::min(spend * 6, (remaining - move_overhead) / 4);
 
     if (max_usage < increment) {
-        max_usage = remaining > 2 * move_overhead ? remaining - 2 * move_overhead : remaining - 1;
+        max_usage = remaining > move_overhead ? remaining - move_overhead : remaining - 1;
     }
 
     return {spend, max_usage};

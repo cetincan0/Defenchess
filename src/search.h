@@ -43,9 +43,12 @@ extern int timer_count,
            total_remaining,
            think_depth_limit;
 
+extern bool is_movetime;
+
 extern volatile bool is_timeout,
                      quit_application,
-                     is_searching;
+                     is_searching,
+                     is_pondering;
 
 inline int time_passed() {
     return (((curr_time.tv_sec - start_ts.tv_sec) * 1000000) + (curr_time.tv_usec - start_ts.tv_usec)) / 1000;
@@ -55,8 +58,9 @@ inline int bench_time(struct timeval s, struct timeval e) {
     return (((e.tv_sec - s.tv_sec) * 1000000) + (e.tv_usec - s.tv_usec)) / 1000;
 }
 
-
 inline void init_time(Position *p, std::vector<std::string> word_list) {
+    is_pondering = false;
+    is_movetime = false;
     timer_count = 1024;
     is_timeout = false;
 
@@ -71,32 +75,35 @@ inline void init_time(Position *p, std::vector<std::string> word_list) {
     if (word_list[1] == "movetime") {
         myremain = stoi(word_list[2]) * 99 / 100;
         total_remaining = myremain;
-    }
-    else if (word_list[1] == "infinite") {
+        is_movetime = true;
+    } else if (word_list[1] == "infinite") {
         myremain = 3600000;
-    }
-    else if (word_list[1] == "depth") {
+        total_remaining = myremain;
+    } else if (word_list[1] == "depth") {
         myremain = 3600000;
+        total_remaining = myremain;
         think_depth_limit = stoi(word_list[2]);
-    }
-    else if (word_list.size() > 1) {
+    } else if (word_list.size() > 1) {
         int moves_to_go = 0;
         int black_remaining = 0;
         int white_remaining = 0;
         int black_increment = 0;
         int white_increment = 0;
 
-        for (unsigned i = 1 ; i < word_list.size() ; i += 2) {
-            if (word_list[i] == "wtime")
+        for (unsigned i = 1; i < word_list.size(); ++i) {
+            if (word_list[i] == "wtime") {
                 white_remaining = stoi(word_list[i + 1]);
-            if (word_list[i] == "btime")
+            } else if (word_list[i] == "btime") {
                 black_remaining = stoi(word_list[i + 1]);
-            if (word_list[i] == "winc")
+            } else if (word_list[i] == "winc") {
                 white_increment = stoi(word_list[i + 1]);
-            if (word_list[i] == "binc")
+            } else if (word_list[i] == "binc") {
                 black_increment = stoi(word_list[i + 1]);
-            if (word_list[i] == "movestogo")
+            } else if (word_list[i] == "movestogo") {
                 moves_to_go = stoi(word_list[i + 1]);
+            } else if (word_list[i] == "ponder") {
+                is_pondering = true;
+            }
         }
 
         TTime t = get_myremain(

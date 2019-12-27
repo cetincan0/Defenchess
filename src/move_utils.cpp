@@ -31,15 +31,26 @@ void show_position_png(Position *p){
     exit(system("python3 scripts/imggen.py"));
 }
 
-string move_to_str(Move m) {
+string move_to_str(Position *p, Move m) {
     if (m == null_move) {
         return "null";
     }
-    string move_str = int_to_notation(move_from(m)) + to_string((move_from(m) >> 3) + 1) +
-                           int_to_notation(move_to(m)) + to_string((move_to(m) >> 3) + 1);
+
+    Square from = move_from(m);
+    Square to = move_to(m);
+
+    if (chess960 && move_type(m) == CASTLING) {
+        Color color = rank_of(to) == RANK_1 ? white : black;
+        to = p->initial_rooks[color][CASTLE_TYPE[to]];
+    }
+
+    string move_str = int_to_notation(from) + to_string(rank_of(from) + 1) +
+                      int_to_notation(to) + to_string(rank_of(to) + 1);
+
     if (move_type(m) == PROMOTION) {
         move_str += piece_chars[get_promotion_piece(m, black)];
     }
+
     return move_str;
 }
 

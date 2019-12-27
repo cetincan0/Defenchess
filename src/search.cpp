@@ -19,6 +19,7 @@
 #include <iostream>
 #include <sys/time.h>
 #include <thread>
+#include <set>
 
 #include "bitboard.h"
 #include "eval.h"
@@ -39,30 +40,21 @@ int timer_count = 1024,
     total_remaining = 10000,
     think_depth_limit = MAX_PLY;
 
+bool is_movetime = false;
+
 volatile bool is_timeout = false,
               quit_application = false,
-              is_searching = false;
+              is_searching = false,
+              is_pondering = false;
 
+Move latest_pv, latest_ponder;
 Move main_pv[MAX_PLY + 1];
-std::vector<Move> root_moves = {};
-int depth_increments[MAX_THREADS] = {
-    0, 1, 2, 3, 3, 4, 4, 5,
-    5, 5, 6, 6, 6, 6, 7, 7,
-    7, 7, 7, 7, 8, 8, 8, 8,
-    8, 8, 8, 8, 9, 9, 9, 9,
-    9, 9, 9, 9, 9, 9, 9, 10,
-    10, 10, 10, 10, 10, 10, 10, 10,
-    10, 10, 10, 10, 10, 10, 11, 11,
-    11, 11, 11, 11, 11, 11, 11, 11
-};
+std::set<Move> root_moves;
 
-Move pv_at_depth[MAX_PLY * 2];
-int score_at_depth[MAX_PLY * 2];
-
-void print_pv(Metadata *md) {
+void print_pv(Position *p, Metadata *md) {
     int i = 0;
     while (md->pv[i] != no_move) {
-        std::cout << move_to_str(md->pv[i++]) << " ";
+        std::cout << move_to_str(p, md->pv[i++]) << " ";
     }
 }
 
@@ -86,19 +78,21 @@ void set_main_pv(Metadata *md) {
 }
 
 bool is_draw(Position *p) {
-    if (p->info->last_irreversible > 3){
-        if (p->info->last_irreversible > 99) {
+    int last_irreversible = p->info->last_irreversible;
+    if (last_irreversible > 3){
+        if (last_irreversible > 99) {
             return true;
         }
 
+        SearchThread *my_thread = p->my_thread;
         int repetition_count = 0;
-        int min_index = std::max(p->my_thread->search_ply - p->info->last_irreversible, 0);
-        for (int i = p->my_thread->search_ply - 4; i >= min_index; i -= 2) {
+        int min_index = std::max(my_thread->search_ply - last_irreversible, 0);
+        for (int i = my_thread->search_ply - 4; i >= min_index; i -= 2) {
             // The i >= 0 condition isn't necessary but would prevent undefined
             // behavior given an invalid fen.
-            Info *info = &p->my_thread->infos[i];
+            Info *info = &my_thread->infos[i];
             if (p->info->hash == info->hash) {
-                if (i >= p->my_thread->root_ply) {
+                if (i >= my_thread->root_ply) {
                     return true;
                 }
 
@@ -117,9 +111,9 @@ bool is_draw(Position *p) {
     return false;
 }
 
-int draw_score(Position *p) {
+int draw_score(SearchThread *my_thread) {
     // Idea from Stockfish, prevents making losing moves during 3fold repetitions.
-    return 1 - (p->my_thread->nodes & 2);
+    return 1 - (my_thread->nodes & 2);
 }
 
 void update_history(int *history, int bonus) {
@@ -135,41 +129,40 @@ void save_killer(Position *p, Metadata *md, Move move, int depth, Move *quiets, 
     }
 
     int bonus = std::min(32 * depth * depth, 16384);
+    Color color = p->color;
     Square from = move_from(move);
     Square to = move_to(move);
-    update_history(&my_thread->history[p->color][from][to], bonus);
+    update_history(&my_thread->history[color][from][to], bonus);
 
-    Move q;
-    for (int i = 0; i < quiets_count; ++i) {
-        q = quiets[i];
-        update_history(&my_thread->history[p->color][move_from(q)][move_to(q)], -bonus);
-    }
+    bool cmh_valid = is_move_valid((md-1)->current_move);
+    bool fmh_valid = is_move_valid((md-2)->current_move);
 
-    if (is_move_valid((md-1)->current_move)) {
-        Piece piece = p->pieces[from];
+    Piece piece = p->pieces[from];
+    if (cmh_valid) {
         Square prev_to = move_to((md-1)->current_move);
-        Piece prev_piece = (md-1)->moved_piece;
-        assert(prev_piece >= white_pawn && prev_piece <= black_king);
+        my_thread->counter_moves[p->pieces[prev_to]][prev_to] = move;
 
-        my_thread->counter_moves[prev_piece][prev_to] = move;
-
-        update_history(&my_thread->counter_move_history[prev_piece][prev_to][piece][to], bonus);
-        for (int i = 0; i < quiets_count; ++i) {
-            q = quiets[i];
-            update_history(&my_thread->counter_move_history[prev_piece][prev_to][p->pieces[move_from(q)]][move_to(q)], -bonus);
-        }
+        update_history(&(md-1)->counter_move_history[piece][to], bonus);
     }
 
-    if (is_move_valid((md-2)->current_move)) {
-        Piece piece = p->pieces[from];
-        Square prev_to = move_to((md-2)->current_move);
-        Piece prev_piece = (md-2)->moved_piece;
-        assert(prev_piece >= white_pawn && prev_piece <= black_king);
+    if (fmh_valid) {
+        update_history(&(md-2)->counter_move_history[piece][to], bonus);
+    }
 
-        update_history(&my_thread->followup_history[prev_piece][prev_to][piece][to], bonus);
-        for (int i = 0; i < quiets_count; ++i) {
-            q = quiets[i];
-            update_history(&my_thread->followup_history[prev_piece][prev_to][p->pieces[move_from(q)]][move_to(q)], -bonus);
+    for (int i = 0; i < quiets_count; ++i) {
+        Move q = quiets[i];
+
+        Piece quiet_piece = p->pieces[move_from(q)];
+        Square quiet_from = move_from(q);
+        Square quiet_to = move_to(q);
+
+        update_history(&my_thread->history[color][quiet_from][quiet_to], -bonus);
+
+        if (cmh_valid) {
+            update_history(&(md-1)->counter_move_history[quiet_piece][quiet_to], -bonus);
+        }
+        if (fmh_valid) {
+            update_history(&(md-2)->counter_move_history[quiet_piece][quiet_to], -bonus);
         }
     }
 }
@@ -183,7 +176,7 @@ void check_time(Position *p) {
 
     if (timer_count == 0) {
         gettimeofday(&curr_time, nullptr);
-        if (time_passed() >= total_remaining) {
+        if (time_passed() >= total_remaining && !is_pondering) {
             is_timeout = true;
         }
 
@@ -206,28 +199,29 @@ int alpha_beta_quiescence(Position *p, Metadata *md, int alpha, int beta, int de
         return !in_check ? evaluate(p) : 0;
     }
 
+    SearchThread *my_thread = p->my_thread;
     if (is_draw(p)) {
-        return draw_score(p);
+        return draw_score(my_thread);
     }
 
     Info *info = p->info;
     md->current_move = no_move;
-    md->moved_piece = no_piece;
     (md+1)->ply = ply + 1;
     int tte_depth = in_check || depth >= 0 ? 0 : -1;
 
     Move tte_move = no_move;
+    int tte_score = UNDEFINED;
     bool tt_hit;
     TTEntry *tte = get_tte(info->hash, tt_hit);
-    int tte_score = UNDEFINED;
+    uint8_t tt_flag = tte_flag(tte);
     if (tt_hit) {
         tte_move = tte->move;
         if (tte->depth >= tte_depth) {
             tte_score = tt_to_score(tte->score, ply);
             if (!is_pv &&
-                (tte_flag(tte) == FLAG_EXACT ||
-                (tte_flag(tte) == FLAG_BETA && tte_score >= beta) ||
-                (tte_flag(tte) == FLAG_ALPHA && tte_score <= alpha))) {
+                (tt_flag == FLAG_EXACT ||
+                (tt_flag == FLAG_BETA && tte_score >= beta) ||
+                (tt_flag == FLAG_ALPHA && tte_score <= alpha))) {
                     return tte_score;
             }
         }
@@ -276,9 +270,11 @@ int alpha_beta_quiescence(Position *p, Metadata *md, int alpha, int beta, int de
         }
 
         make_move(p, move);
-        ++p->my_thread->nodes;
+        ++my_thread->nodes;
         md->current_move = move;
-        md->moved_piece = p->pieces[move_to(move)];
+        Square to = move_to(move);
+        Piece piece = p->pieces[to];
+        md->counter_move_history = p->my_thread->counter_move_history[piece][to];
         int score = -alpha_beta_quiescence(p, md+1, -beta, -alpha, depth - 1, is_checked(p));
         undo_move(p, move);
 
@@ -323,6 +319,7 @@ int alpha_beta(Position *p, Metadata *md, int alpha, int beta, int depth, bool i
     }
 
     bool root_node = ply == 0;
+    SearchThread *my_thread = p->my_thread;
 
     check_time(p);
     if (!root_node) {
@@ -335,17 +332,23 @@ int alpha_beta(Position *p, Metadata *md, int alpha, int beta, int depth, bool i
         }
 
         if (is_draw(p)) {
-            return draw_score(p);
+            return draw_score(my_thread);
+        }
+
+        // Mate distance pruning
+        alpha = std::max(-MATE + ply, alpha);
+        beta = std::min(MATE - ply - 1, beta);
+        if (alpha >= beta) {
+            return alpha;
         }
     }
 
-    if (is_pv && ply > p->my_thread->selply) {
-        p->my_thread->selply = ply;
+    if (is_pv && ply > my_thread->selply) {
+        my_thread->selply = ply;
     }
 
     Info *info = p->info;
     md->current_move = (md+1)->excluded_move = no_move;
-    md->moved_piece = no_piece;
     Move excluded_move = md->excluded_move;
     uint64_t pos_hash = info->hash ^ uint64_t(excluded_move << 16);
 
@@ -356,14 +359,15 @@ int alpha_beta(Position *p, Metadata *md, int alpha, int beta, int depth, bool i
     int tte_score = UNDEFINED;
     bool tt_hit;
     TTEntry *tte = get_tte(pos_hash, tt_hit);
+    uint8_t tt_flag = tte_flag(tte);
     if (tt_hit) {
         tte_move = tte->move;
         if (tte->depth >= depth) {
             tte_score = tt_to_score(tte->score, ply);
             if (!is_pv &&
-                (tte_flag(tte) == FLAG_EXACT ||
-                (tte_flag(tte) == FLAG_BETA && tte_score >= beta) ||
-                (tte_flag(tte) == FLAG_ALPHA && tte_score <= alpha))) {
+                (tt_flag == FLAG_EXACT ||
+                (tt_flag == FLAG_BETA && tte_score >= beta) ||
+                (tt_flag == FLAG_ALPHA && tte_score <= alpha))) {
                     return tte_score;
             }
         }
@@ -373,7 +377,7 @@ int alpha_beta(Position *p, Metadata *md, int alpha, int beta, int depth, bool i
     if (!root_node && tb_initialized) {
         int wdl = probe_syzygy_wdl(p);
         if (wdl != SYZYGY_FAIL) {
-            ++p->my_thread->tb_hits;
+            ++my_thread->tb_hits;
             int tb_score = wdl == SYZYGY_LOSS ? MATED_IN_MAX_PLY + ply + 1
                          : wdl == SYZYGY_WIN  ? MATE_IN_MAX_PLY  - ply - 1 : 0;
 
@@ -407,13 +411,15 @@ int alpha_beta(Position *p, Metadata *md, int alpha, int beta, int depth, bool i
     }
 
     // Null move pruning
-    if (!in_check && !is_pv && !is_null && excluded_move == no_move && depth > 2 && md->static_eval >= beta && info->non_pawn_material[p->color]) {
+    if (!in_check && !is_pv && my_thread->nmp_enabled && !is_null &&
+        excluded_move == no_move && depth > 2 && md->static_eval >= beta && info->non_pawn_material[p->color])
+    {
         int R = 3 + depth / 4 + std::min((md->static_eval - beta) / PAWN_MID, 3);
 
         make_null_move(p);
         md->current_move = null_move;
-        md->moved_piece = no_piece;
-        ++p->my_thread->nodes;
+        md->counter_move_history = p->my_thread->counter_move_history[no_piece][0];
+        ++my_thread->nodes;
         int null_eval = -alpha_beta(p, md+1, -beta, -beta + 1, depth - R, false);
         undo_null_move(p);
 
@@ -422,7 +428,9 @@ int alpha_beta(Position *p, Metadata *md, int alpha, int beta, int depth, bool i
                 return null_eval;
             }
 
+            my_thread->nmp_enabled = false;
             int verification = alpha_beta(p, md, beta - 1, beta, depth - R, false);
+            my_thread->nmp_enabled = true;
             if (verification >= beta) {
                 return verification;
             }
@@ -439,7 +447,9 @@ int alpha_beta(Position *p, Metadata *md, int alpha, int beta, int depth, bool i
             if (move != excluded_move && is_legal(p, move)) {
                 make_move(p, move);
                 md->current_move = move;
-                md->moved_piece = p->pieces[move_to(move)];
+                Square to = move_to(move);
+                Piece piece = p->pieces[to];
+                md->counter_move_history = p->my_thread->counter_move_history[piece][to];
                 int value = -alpha_beta(p, md+1, -rbeta, -rbeta +  1, depth - 4, is_checked(p));
                 undo_move(p, move);
 
@@ -469,7 +479,7 @@ int alpha_beta(Position *p, Metadata *md, int alpha, int beta, int depth, bool i
             continue;
         }
 
-        if (root_node && !std::count(root_moves.begin(), root_moves.end(), move)) {
+        if (root_node && root_moves.find(move) == root_moves.end()) {
             continue;
         }
 
@@ -487,11 +497,10 @@ int alpha_beta(Position *p, Metadata *md, int alpha, int beta, int depth, bool i
             !root_node &&
             excluded_move == no_move &&
             std::abs(tte_score) < TB_WIN &&
-            (tte_flag(tte) & FLAG_BETA) &&
+            (tt_flag & FLAG_BETA) &&
             tte->depth >= depth - 2 &&
             is_legal(p, move))
         {
-            assert(tte_flag(tte) == FLAG_BETA || tte_flag(tte) == FLAG_EXACT);
             assert(tte_score != UNDEFINED);
             int rbeta = std::max(tte_score - 2 * depth, -MATE + 1);
             md->excluded_move = move;
@@ -503,7 +512,15 @@ int alpha_beta(Position *p, Metadata *md, int alpha, int beta, int depth, bool i
             }
         }
 
+        // History score has to be obtained before calling make move which changes the position
+        int history, cmh, fmh;
+        get_history_scores(p, md, move, &history, &cmh, &fmh);
+
         if (!root_node && !important && depth < 8 && num_moves >= futility_move_counts[improving][depth]) {
+            continue;
+        }
+
+        if (!root_node && !important && depth < 5 && cmh < 0 && fmh < 0) {
             continue;
         }
 
@@ -520,13 +537,12 @@ int alpha_beta(Position *p, Metadata *md, int alpha, int beta, int depth, bool i
             continue;
         }
 
-        // History score has to be obtained before calling make move which changes the position
-        int quiet_score = score_quiet(p, md, move);
-
         make_move(p, move);
-        ++p->my_thread->nodes;
+        ++my_thread->nodes;
         md->current_move = move;
-        md->moved_piece = p->pieces[move_to(move)];
+        Square to = move_to(move);
+        Piece piece = p->pieces[to];
+        md->counter_move_history = p->my_thread->counter_move_history[piece][to];
         if (!capture_or_promo && quiets_count < 64) {
             quiets[quiets_count++] = move;
         }
@@ -549,6 +565,7 @@ int alpha_beta(Position *p, Metadata *md, int alpha, int beta, int depth, bool i
                     --reduction;
                 }
 
+                int quiet_score = history + cmh + fmh;
                 reduction = std::max(reduction - quiet_score / 12288, 0);
             }
 
@@ -606,7 +623,8 @@ int alpha_beta(Position *p, Metadata *md, int alpha, int beta, int depth, bool i
     return best_score;
 }
 
-void print_info(SearchThread *my_thread, Metadata *md, int depth, int score, int alpha, int beta, bool pv_printed) {
+void print_info(Position *p, Metadata *md, int depth, int score, int alpha, int beta, bool pv_printed) {
+    SearchThread *my_thread = p->my_thread;
     gettimeofday(&curr_time, nullptr);
     int time_taken = time_passed();
     uint64_t tb_hits = sum_tb_hits();
@@ -632,10 +650,10 @@ void print_info(SearchThread *my_thread, Metadata *md, int depth, int score, int
     uint64_t nodes = sum_nodes();
     std::cout << " nodes " << nodes <<  " nps " << nodes*1000/(time_taken+1) << " time " << time_taken << " pv ";
     if (pv_printed) {
-        print_pv(md);
+        print_pv(p, md);
     } else {
         // For fail lows, only print the first move of the main pv
-        std::cout << move_to_str(main_pv[0]);
+        std::cout << move_to_str(p, main_pv[0]);
     }
     std::cout << std::endl;
 }
@@ -645,6 +663,8 @@ void thread_think(SearchThread *my_thread, bool in_check) {
     Metadata *md = &my_thread->metadatas[2]; // Start from 2 so that we can do (md-2) without checking
     bool is_main = is_main_thread(p);
 
+    Move pv_at_depth[MAX_PLY * 2];
+
     int previous = -MATE;
     int score = -MATE;
     int init_remain = myremain;
@@ -652,11 +672,6 @@ void thread_think(SearchThread *my_thread, bool in_check) {
     int depth = 0;
 
     while (++depth <= think_depth_limit) {
-        if (!is_main) {
-            depth = main_thread.depth + depth_increments[my_thread->thread_id];
-        }
-
-        my_thread->depth = depth;
         my_thread->selply = 0;
 
         int aspiration = 10;
@@ -669,22 +684,21 @@ void thread_think(SearchThread *my_thread, bool in_check) {
         }
 
         bool failed_low = false;
+
         while (true) {
             score = alpha_beta(p, md, alpha, beta, depth, in_check);
 
-            // Only set main pv when it's not a fail low
-            if (is_main && score > alpha && score != TIMEOUT) {
-                set_main_pv(md);
-            }
-
-            // This timeout has to be after setting main pv, otherwise
-            // it'll cause a1a1 to be outputted as the pv
             if (is_timeout) {
                 break;
             }
 
-            if (is_main && score != TIMEOUT && (score <= alpha || score >= beta) && depth > 12) {
-                print_info(my_thread, md, depth, score, alpha, beta, false);
+            // Only set main pv when it's not a fail low
+            if (is_main && score > alpha) {
+                set_main_pv(md);
+            }
+
+            if (is_main && (score <= alpha || score >= beta) && depth > 12) {
+                print_info(p, md, depth, score, alpha, beta, false);
             }
 
             if (score <= alpha) {
@@ -711,21 +725,23 @@ void thread_think(SearchThread *my_thread, bool in_check) {
             continue;
         }
 
-        print_info(my_thread, md, depth, score, alpha, beta, true);
+        print_info(p, md, depth, score, alpha, beta, true);
 
-        if (time_passed() > myremain) {
+        if (time_passed() > myremain && !is_pondering) {
             is_timeout = true;
             break;
         }
 
-        pv_at_depth[depth - 1] = main_pv[0];
-        score_at_depth[depth - 1] = score;
+        // At this point, it is guaranteed that the current depth has finished
+        // so it's safe to assume that the pv and ponder are valid.
+        pv_at_depth[depth] = latest_pv = main_pv[0];
+        latest_ponder = main_pv[1];
 
-        if (depth >= 6) {
+        if (depth >= 6 && !is_movetime) {
             if (failed_low) {
                 myremain = myremain * (200 + std::min(depth, 20)) / 200;
             }
-            if (pv_at_depth[depth - 1] == pv_at_depth[depth - 2]) {
+            if (pv_at_depth[depth] == pv_at_depth[depth - 1]) {
                 myremain = std::max(init_remain / 2, myremain * 94 / 100);
                 total_remaining = std::min(myremain * 6, total_remaining);
             } else {
@@ -754,42 +770,40 @@ void think(Position *p, std::vector<std::string> word_list) {
     if (wdl != SYZYGY_FAIL) {
         // Return draws immediately
         if (wdl == SYZYGY_DRAW) {
+            while (is_pondering) {}
             std::cout << "info score cp 0" << std::endl;
-            std::cout << "bestmove " << move_to_str(tb_move) << std::endl;
+            std::cout << "bestmove " << move_to_str(p, tb_move) << std::endl;
             return;
         }
-        root_moves.push_back(tb_move);
+        root_moves.insert(tb_move);
     } else {
         MoveGen movegen = new_movegen(p, md, no_move, NORMAL_SEARCH, 0, in_check);
         Move move;
         while ((move = next_move(&movegen, md, 0)) != no_move) {
             if (is_legal(p, move)) {
-                root_moves.push_back(move);
+                root_moves.insert(move);
             }
         }
         if (root_moves.size() == 1) {
-            std::cout << "bestmove " << move_to_str(root_moves[0]) << std::endl;
+            while (is_pondering) {}
+            std::cout << "bestmove " << move_to_str(p, *root_moves.begin()) << std::endl;
             return;
         }
         if (root_moves.size() == 0) {
+            while (is_pondering) {}
             std::cout << "bestmove none" << std::endl;
             return;
         }
     }
 
     gettimeofday(&start_ts, nullptr);
-    std::memset(pv_at_depth, 0, sizeof(pv_at_depth));
-    std::memset(score_at_depth, 0, sizeof(score_at_depth));
 
-    std::thread threads[MAX_THREADS];
+    std::thread *threads = new std::thread[num_threads];
     initialize_nodes();
 
     is_searching = true;
-    threads[0] = std::thread(thread_think, &main_thread, in_check);
-
-    for (int i = 1; i < num_threads; ++i) {
-        SearchThread *t = get_thread(i);
-        threads[i] = std::thread(thread_think, t, in_check);
+    for (int i = 0; i < num_threads; ++i) {
+        threads[i] = std::thread(thread_think, get_thread(i), in_check);
     }
 
     // Stop threads
@@ -797,9 +811,20 @@ void think(Position *p, std::vector<std::string> word_list) {
         threads[i].join();
     }
 
+    delete[] threads;
+
+    // If search is stopped for some reason while pondering, wait before printing best move
+    while (is_pondering) {}
+
     gettimeofday(&curr_time, nullptr);
     std::cout << "info time " << time_passed() << std::endl;
-    std::cout << "bestmove " << move_to_str(main_pv[0]) << std::endl;
+    std::cout << "bestmove " << move_to_str(p, main_pv[0]);
+
+    if (main_pv[0] == latest_pv && is_move_valid(latest_ponder)) {
+        std::cout << " ponder " << move_to_str(p, latest_ponder);
+    }
+
+    std::cout << std::endl;
 
     if (quit_application) {
         exit(EXIT_SUCCESS);

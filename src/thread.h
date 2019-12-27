@@ -22,7 +22,7 @@
 void get_ready();
 void clear_threads();
 void init_threads();
-void reset_threads();
+void reset_threads(int thread_num);
 
 #endif
 

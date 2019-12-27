@@ -16,6 +16,8 @@
     along with Defenchess.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <random>
+
 #include "bitboard.h"
 #include "data.h"
 #include "magic.h"
@@ -36,14 +38,11 @@ Bitboard KING_EXTENDED_MASKS[2][64];
 Bitboard bfi[65];
 Bitboard bfi_queen_castle[2];
 Bitboard bfi_king_castle[2];
-Bitboard KING_CASTLE_MASK[2];
-Bitboard KING_CASTLE_MASK_THREAT[2];
-Bitboard QUEEN_CASTLE_MASK[2];
-Bitboard QUEEN_CASTLE_MASK_THREAT[2];
 Bitboard PAWN_ADVANCE_MASK_1[64][2];
 Bitboard PAWN_ADVANCE_MASK_2[64][2];
 Bitboard PAWN_CAPTURE_MASK[64][2];
 Bitboard BETWEEN_MASK[64][64];
+Bitboard BETWEEN_MASK_INCLUSIVE[64][64];
 Bitboard FROMTO_MASK[64][64];
 Bitboard PASSED_PAWN_MASK[64][2];
 Bitboard FRONT_MASK[64][2];
@@ -53,18 +52,18 @@ Bitboard FRONT_RANK_MASKS[64][8];
 
 Material material_base[9*3*3*3*2*9*3*3*3*2];
 
-uint8_t CASTLING_RIGHTS[64];
-
-uint8_t ROOK_MOVES_CASTLE_FROM[64];
-uint8_t ROOK_MOVES_CASTLE_TO[64];
-uint8_t ROOK_MOVES_CASTLE_PIECE[64];
+int CASTLE_TYPE[64];
+Square ROOK_MOVES_CASTLE_TO[64];
 
 Square ENPASSANT_INDEX[64];
-uint64_t castlingHash[16];
-uint64_t polyglotCombined[NUM_PIECE][64];
+uint64_t castling_hash[16];
+uint64_t enpassant_hash[8];
+uint64_t white_hash;
+uint64_t hash_combined[NUM_PIECE][64];
 
 int num_threads = 1;
 int move_overhead = 100;
+bool chess960 = false;
 
 SearchThread main_thread;
 SearchThread *search_threads;
@@ -117,6 +116,7 @@ void init_between() {
         for (Square j = A1; j <= H8; ++j) {
             if (i == j) {
                 BETWEEN_MASK[i][j] = 0;
+                BETWEEN_MASK_INCLUSIVE[i][j] = bfi[i];
                 continue;
             }
             if (file_of(i) == file_of(j)) {
@@ -140,6 +140,7 @@ void init_between() {
             } else {    
                 BETWEEN_MASK[i][j] = 0;
             }
+            BETWEEN_MASK_INCLUSIVE[i][j] = BETWEEN_MASK[i][j] | bfi[i] | bfi[j];
         }
     }
 }
@@ -243,82 +244,55 @@ void init_bfi() {
 }
 
 void init_castles() {
-    KING_CASTLE_MASK[white] = bfi[F1] | bfi[G1];
-    KING_CASTLE_MASK_THREAT[white] = bfi[E1] | bfi[F1] | bfi[G1];
-    KING_CASTLE_MASK[black] = bfi[F8] | bfi[G8];
-    KING_CASTLE_MASK_THREAT[black] = bfi[E8] | bfi[F8] | bfi[G8];
-
-    QUEEN_CASTLE_MASK[white] = bfi[B1] | bfi[C1] | bfi[D1];
-    QUEEN_CASTLE_MASK_THREAT[white] = bfi[C1] | bfi[D1] | bfi[E1];
-    QUEEN_CASTLE_MASK[black] = bfi[B8] | bfi[C8] | bfi[D8];
-    QUEEN_CASTLE_MASK_THREAT[black] = bfi[C8] | bfi[D8] | bfi[E8];
-
     bfi_queen_castle[white] = bfi[C1];
     bfi_queen_castle[black] = bfi[C8];
     bfi_king_castle[white] = bfi[G1];
     bfi_king_castle[black] = bfi[G8];
 
-    // black_queenside | black_kingside | white_queenside | white_kingside
-    for (Square sq = A1; sq <= H8; ++sq) {
-        if (sq == A8) {
-            // Black queenside
-            CASTLING_RIGHTS[sq] = 7;
-        } else if (sq == H8) {
-            // Black kingside
-            CASTLING_RIGHTS[sq] = 11;
-        } else if (sq == E8) {
-            // Black both
-            CASTLING_RIGHTS[sq] = 3;
-        } else if (sq == A1) {
-            // White queenside
-            CASTLING_RIGHTS[sq] = 13;
-        } else if (sq == H1) {
-            // White kingside
-            CASTLING_RIGHTS[sq] = 14;
-        } else if (sq == E1) {
-            // White both
-            CASTLING_RIGHTS[sq] = 12;
-        } else {
-            CASTLING_RIGHTS[sq] = 15;
-        }
-        ROOK_MOVES_CASTLE_FROM[sq] = 0;
-        ROOK_MOVES_CASTLE_TO[sq] = 0;
-        ROOK_MOVES_CASTLE_PIECE[sq] = 0;
-    }
+    CASTLE_TYPE[G1] = KINGSIDE;
+    CASTLE_TYPE[C1] = QUEENSIDE;
+    CASTLE_TYPE[G8] = KINGSIDE;
+    CASTLE_TYPE[C8] = QUEENSIDE;
 
-    ROOK_MOVES_CASTLE_FROM[G1] = H1;
     ROOK_MOVES_CASTLE_TO[G1] = F1;
-    ROOK_MOVES_CASTLE_PIECE[G1] = white_rook;
-    ROOK_MOVES_CASTLE_FROM[C1] = A1;
     ROOK_MOVES_CASTLE_TO[C1] = D1;
-    ROOK_MOVES_CASTLE_PIECE[C1] = white_rook;
-    ROOK_MOVES_CASTLE_FROM[G8] = H8;
     ROOK_MOVES_CASTLE_TO[G8] = F8;
-    ROOK_MOVES_CASTLE_PIECE[G8] = black_rook;
-    ROOK_MOVES_CASTLE_FROM[C8] = A8;
     ROOK_MOVES_CASTLE_TO[C8] = D8;
-    ROOK_MOVES_CASTLE_PIECE[C8] = black_rook;
 }
 
-void init_polyglot() {
-    for (int castle_mask = 0; castle_mask < 16; castle_mask++) {
-        if (castle_mask & 1) { // White king-side
-            castlingHash[castle_mask] ^= polyglotCastle[0];
-        }
-        if (castle_mask & 2) { // White queen-side
-            castlingHash[castle_mask] ^= polyglotCastle[1];
-        }
-        if (castle_mask & 4) { // Black king-side
-            castlingHash[castle_mask] ^= polyglotCastle[2];
-        }
-        if (castle_mask & 8) { // Black queen-side
-            castlingHash[castle_mask] ^= polyglotCastle[3];
-        }
-    }
+void init_hash() {
+    std::mt19937_64 r(0);
+
+    uint64_t castling_hash_array[4];
 
     for (int i = 0; i < NUM_PIECE; i++) {
         for (int j = 0; j < 64; j++) {
-            polyglotCombined[i][j] = polyglotArray[polyglotPieces[i] + j];
+            hash_combined[i][j] = r();
+        }
+    }
+
+    for (int i = 0; i < 4; ++i) {
+        castling_hash_array[i] = r();
+    }
+
+    for (int i = 0; i < 8; ++i) {
+        enpassant_hash[i] = r();
+    }
+
+    white_hash = r();
+
+    for (int castle_mask = 0; castle_mask < 16; castle_mask++) {
+        if (castle_mask & can_king_castle_mask[white]) { // White king-side
+            castling_hash[castle_mask] ^= castling_hash_array[0];
+        }
+        if (castle_mask & can_queen_castle_mask[white]) { // White queen-side
+            castling_hash[castle_mask] ^= castling_hash_array[1];
+        }
+        if (castle_mask & can_king_castle_mask[black]) { // Black king-side
+            castling_hash[castle_mask] ^= castling_hash_array[2];
+        }
+        if (castle_mask & can_queen_castle_mask[black]) { // Black queen-side
+            castling_hash[castle_mask] ^= castling_hash_array[3];
         }
     }
 }
@@ -542,7 +516,7 @@ void init_masks() {
     init_fromto();
     init_pawns();
     init_values();
-    init_polyglot();
+    init_hash();
     init_passed_pawns();
     init_pawn_masks();
     init_adj();

@@ -78,17 +78,21 @@ inline bool is_legal(Position *p, Move m) {
 }
 
 inline bool is_position_valid(Position *p) {
-    if (distance(p->king_index[white], p->king_index[black]) <= 1)
+    if (distance(p->king_index[white], p->king_index[black]) <= 1) {
         return false;
+    }
 
-    if (p->color != white && p->color != black)
+    if (p->color != white && p->color != black) {
         return false;
+    }
 
-    if (!is_king(p->pieces[p->king_index[white]]) || !is_king(p->pieces[p->king_index[black]]))
+    if (!is_king(p->pieces[p->king_index[white]]) || !is_king(p->pieces[p->king_index[black]])) {
         return false;
+    }
 
-    if (p->info->enpassant != no_sq && relative_rank(p->info->enpassant, p->color) != RANK_6)
+    if (p->info->enpassant != no_sq && relative_rank(p->info->enpassant, p->color) != RANK_6) {
         return false;
+    }
 
     return true;
 }
@@ -108,16 +112,43 @@ inline Move _promoten(Move m) {
 
 inline bool can_king_castle(Position *p) {
     Color color = p->color;
-    return (p->info->castling & can_king_castle_mask[color]) &&
-           !(KING_CASTLE_MASK[color] & p->board) &&
-           !(KING_CASTLE_MASK_THREAT[color] & color_targets(p, ~color));
+    if (!(p->info->castling & can_king_castle_mask[color])) {
+        return false;
+    }
+
+    Square king_from = p->king_index[color];
+    Square king_to = color == white ? G1 : G8;
+    Square rook_from = p->initial_rooks[color][KINGSIDE];
+    Square rook_to = color == white ? F1 : F8;
+
+    // Check that there aren't any pieces between the king and its destination,
+    // and the rook and its destination except for the king and said rook.
+    // Also check that the squares between the king and its destination aren't
+    // threatened.
+    Bitboard king_between = BETWEEN_MASK_INCLUSIVE[king_from][king_to];
+    Bitboard rook_between = BETWEEN_MASK_INCLUSIVE[rook_from][rook_to];
+    Bitboard castling_board = p->board ^ bfi[king_from] ^ bfi[rook_from];
+    return !((king_between | rook_between) & castling_board) &&
+           !(king_between & color_targets(p, castling_board, ~color));
 }
 
 inline bool can_queen_castle(Position *p) {
     Color color = p->color;
-    return (p->info->castling & can_queen_castle_mask[color]) &&
-           !(QUEEN_CASTLE_MASK[color] & p->board) &&
-           !(QUEEN_CASTLE_MASK_THREAT[color] & color_targets(p, ~color));
+    if (!(p->info->castling & can_queen_castle_mask[color])) {
+        return false;
+    }
+
+    Square king_from = p->king_index[color];
+    Square king_to = color == white ? C1 : C8;
+    Square rook_from = p->initial_rooks[color][QUEENSIDE];
+    Square rook_to = color == white ? D1 : D8;
+
+    // Same logic as checking king castling rules
+    Bitboard king_between = BETWEEN_MASK_INCLUSIVE[king_from][king_to];
+    Bitboard rook_between = BETWEEN_MASK_INCLUSIVE[rook_from][rook_to];
+    Bitboard castling_board = p->board ^ bfi[king_from] ^ bfi[rook_from];
+    return !((king_between | rook_between) & castling_board) &&
+           !(king_between & color_targets(p, castling_board, ~color));
 }
 #endif
 

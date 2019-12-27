@@ -29,22 +29,23 @@ void evaluate_pawn_structure(Evaluation *eval, Position *p, Color color) {
     Bitboard opponent_pawns = p->bbs[pawn(~color)];
     Bitboard pawns = my_pawns;
     Bitboard supported, adjacent, doubled;
-    bool opposed, passing, isolated, backward;
+    bool opposed, isolated, backward;
 
     eval->pawntte->pawn_passers[color] = 0;
     eval->pawntte->semi_open_files[color] = 0xFF;
 
     while (pawns) {
         Square sq = pop(&pawns);
+        Square fwd = pawn_forward(sq, color);
+        Square fwd2 = pawn_forward(fwd, color);
 
         supported = my_pawns & PAWN_CAPTURE_MASK[sq][~color];
         adjacent = my_pawns & ADJACENT_MASK[sq];
         isolated = (MASK_ISOLATED[file_of(sq)] & my_pawns) == 0;
         opposed = (FRONT_MASK[sq][color] & opponent_pawns) != 0;
-        passing = (PASSED_PAWN_MASK[sq][color] & opponent_pawns) == 0;
         doubled = my_pawns & FRONT_MASK[sq][color];
         backward = !(my_pawns & PASSED_PAWN_MASK[sq][~color]) &&
-                   (bfi[pawn_forward(sq, color)] & eval->targets[pawn(~color)]);
+                   (bfi[fwd] & eval->targets[pawn(~color)]);
 
         if (supported | adjacent) {
             pawn_structure += connected_bonus[opposed][bool(adjacent)][relative_rank(sq, color)];
@@ -58,7 +59,11 @@ void evaluate_pawn_structure(Evaluation *eval, Position *p, Color color) {
             pawn_structure -= double_pawn_penalty;
         }
 
-        if (passing) {
+        Bitboard forward_threats = opponent_pawns & PAWN_CAPTURE_MASK[fwd][color];
+        if (!opposed &&
+            (!(PASSED_PAWN_MASK[fwd][color] & opponent_pawns) ||
+             (!(PASSED_PAWN_MASK[fwd2][color] & opponent_pawns) && count(adjacent) >= count(forward_threats))))
+        {
             eval->pawntte->pawn_passers[color] |= bfi[sq];
         }
 

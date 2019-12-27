@@ -214,13 +214,13 @@ uint64_t fastPerft(int depth, Position *p, bool root, bool in_check) {
                 }
                 move_nodes = movegen_leaf.tail;
             } else {
-                move_nodes = Perft(depth - 1, p, false, checks);
+                move_nodes = fastPerft(depth - 1, p, false, checks);
             }
             nodes += move_nodes;
             undo_move(p, move);
         }
         if (root) {
-            std::cout << move_to_str(move) << ": " << move_nodes << std::endl;
+            std::cout << move_to_str(p, move) << ": " << move_nodes << std::endl;
         }
     }
 
@@ -243,7 +243,7 @@ void pseudolegal_test(Position *p) {
                     }
                 }
                 if (!found) {
-                    std::cout << move_to_str(gen_move) << std::endl;
+                    std::cout << move_to_str(p, gen_move) << std::endl;
                     show_position_png(p);
                 }
                 assert(found);
@@ -273,7 +273,7 @@ uint64_t Perft(int depth, Position *p, bool root, bool in_check) {
         nodes += move_nodes;
         undo_move(p, move);
         if (root) {
-            std::cout << move_to_str(move) << ": " << move_nodes << std::endl;
+            std::cout << move_to_str(p, move) << ": " << move_nodes << std::endl;
         }
     }
 
