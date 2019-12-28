@@ -84,7 +84,7 @@ bool word_equal(int index, string comparison_str) {
 
 void uci() {
     cout << "id name Defenchess 2.3 x64" << endl << "id author Can Cetin & Dogac Eldenk" << endl;
-    cout << "option name Hash type spin default 16 min 1 max 16384" << endl;
+    cout << "option name Hash type spin default 16 min 1 max 65536" << endl;
     cout << "option name Threads type spin default 1 min 1 max " << MAX_THREADS << endl;
     cout << "option name SyzygyPath type string default <empty>" << endl;
     cout << "option name MoveOverhead type spin default 100 min 0 max 5000" << endl;
