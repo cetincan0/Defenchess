@@ -16,6 +16,12 @@ Defenchess is a free, open source UCI chess engine written in C++. This project 
 * #### MoveOverhead
   The minimum amount of time in milliseconds to be left on the clock while moving. Should be increased if the engine is losing on time. (default 100)
 
+* #### Ponder
+  This parameter is just to tell GUIs that the engine is capable of pondering. The engine will respond to the "go ponder" command regardless of it being set to true or false.
+
+* #### UCI\_Chess960
+  This parameter will let the engine play Chess960 (FRC) when set to true.
+
 
 ### Special thanks
 - Donna and the Chess Programming Wiki for the inspiration and helping us understand the basics of chess engines

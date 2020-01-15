@@ -51,7 +51,7 @@ Bitboard generate_pawn_targets(Position *p, Square index) {
 
 Bitboard generate_king_targets(Square index);
 
-Bitboard color_targets(Position *p, Color color);
+Bitboard color_targets(Position *p, Bitboard board, Color color);
 
 Bitboard targeted_from(Position *p, Bitboard board, Color c, Square index);
 Bitboard targeted_from_enpassant(Position *p, Color c, Square index);

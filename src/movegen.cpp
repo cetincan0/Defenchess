@@ -29,7 +29,7 @@ bool scored_move_compare(ScoredMove lhs, ScoredMove rhs) { return lhs.score < rh
 void print_movegen(MoveGen *movegen) {
     std::cout << "movegen: ";
     for (int i = movegen->head; i < movegen->tail; i++) {
-        std::cout << move_to_str(movegen->moves[i].move) << "(" << movegen->moves[i].score << "), ";
+        std::cout << move_to_str(movegen->position, movegen->moves[i].move) << "(" << movegen->moves[i].score << "), ";
     }
     std::cout << std::endl;
 }
@@ -342,7 +342,7 @@ void generate_king_evasions(MoveGen *movegen, Position *p) {
 
     // Remove the king from the board temporarily
     p->board ^= bfi[k_index];
-    Bitboard b = generate_king_targets(k_index) & ~p->bbs[p->color] & ~color_targets(p, ~p->color);
+    Bitboard b = generate_king_targets(k_index) & ~p->bbs[p->color] & ~color_targets(p, p->board, ~p->color);
     p->board ^= bfi[k_index];
  
     while (b) {

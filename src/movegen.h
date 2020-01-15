@@ -31,24 +31,24 @@ void generate_evasions(MoveGen *movegen, Position *p);
 void generate_king_evasions(MoveGen *movegen, Position *p);
 Move next_move(MoveGen *movegen, Metadata *md, int depth);
 
+inline void get_history_scores(Position *p, Metadata *md, Move move, int *history, int *cmh, int *fmh) {
+    Square from = move_from(move);
+    Square to = move_to(move);
+    Piece piece = p->pieces[from];
+
+    *history = p->my_thread->history[p->color][from][to];
+    *cmh = (md-1)->counter_move_history[piece][to];
+    *fmh = (md-2)->counter_move_history[piece][to];
+}
+
 inline int score_quiet(Position *p, Metadata *md, Move move) {
     Square from = move_from(move);
     Square to = move_to(move);
-
-    Move prev_move = (md-1)->current_move;
     Piece piece = p->pieces[from];
-    Square prev_to = move_to(prev_move);
-    Piece prev_piece = (md-1)->moved_piece;
 
-    Move followup_move = (md-2)->current_move;
-    Square followup_to = move_to(followup_move);
-    Piece followup_piece = (md-2)->moved_piece;
-
-    assert(prev_piece == no_piece || (prev_piece >= white_pawn && prev_piece <= black_king));
-    assert(followup_piece == no_piece || (followup_piece >= white_pawn && followup_piece <= black_king));
     return p->my_thread->history[p->color][from][to] +
-           p->my_thread->counter_move_history[prev_piece][prev_to][piece][to] +
-           p->my_thread->followup_history[followup_piece][followup_to][piece][to];
+           (md-1)->counter_move_history[piece][to] +
+           (md-2)->counter_move_history[piece][to];
 }
 
 inline int score_capture_mvvlva(Position *p, Move move) {

@@ -42,7 +42,7 @@ void get_ready() {
 
     for (int i = 0; i < num_threads; ++i) {
         SearchThread *t = get_thread(i);
-        t->depth = 1;
+        t->nmp_enabled = true;
 
         // Clear the metadata
         for (int j = 0; j < MAX_PLY + 2; ++j) {
@@ -54,7 +54,29 @@ void get_ready() {
             md->killers[1] = no_move;
             md->pv[0] = no_move;
             md->excluded_move = no_move;
-            md->moved_piece = no_piece;
+            md->counter_move_history = t->counter_move_history[no_piece][0];
+        }
+    }
+}
+
+void delete_histories(SearchThread *t) {
+    for (int j = 0; j < NUM_PIECE; ++j) {
+        for (int k = 0; k < 64; ++k) {
+            for (int l = 0; l < NUM_PIECE; ++l) {
+                delete[] t->counter_move_history[j][k][l];
+            }
+            delete[] t->counter_move_history[j][k];
+        }
+    }
+}
+
+void init_histories(SearchThread *t) {
+    for (int j = 0; j < NUM_PIECE; ++j) {
+        for (int k = 0; k < 64; ++k) {
+            t->counter_move_history[j][k] = new int*[NUM_PIECE];
+            for (int l = 0; l < NUM_PIECE; ++l) {
+                t->counter_move_history[j][k][l] = new int[64];
+            }
         }
     }
 }
@@ -65,8 +87,17 @@ void clear_threads() {
 
         // Clear history
         std::memset(&search_thread->history, 0, sizeof(search_thread->history));
-        std::memset(&search_thread->counter_move_history, 0, sizeof(search_thread->counter_move_history));
-        std::memset(&search_thread->followup_history, 0, sizeof(search_thread->followup_history));
+
+        init_histories(search_thread);
+        for (int j = 0; j < NUM_PIECE; ++j) {
+            for (int k = 0; k < 64; ++k) {
+                for (int l = 0; l < NUM_PIECE; ++l) {
+                    for (int m = 0; m < 64; ++m) {
+                        search_thread->counter_move_history[j][k][l][m] = j == no_piece ? -1 : 0;
+                    }
+                }
+            }
+        }
 
         // Clear counter moves
         for (int j = 0; j < NUM_PIECE; ++j) {
@@ -77,24 +108,28 @@ void clear_threads() {
     }
 }
 
-void reset_threads() {
-    // Don't touch the main thread
-    search_threads = (SearchThread*) realloc(search_threads, (num_threads - 1) * sizeof(SearchThread));
-
+void reset_threads(int thread_num) {
     for (int i = 0; i < num_threads; ++i) {
-        SearchThread *t = get_thread(i);
-        t->thread_id = i;
+        // Only delete histories of existing threads
+        delete_histories(get_thread(i));
+    }
+
+    num_threads = thread_num;
+    delete[] search_threads;
+    search_threads = new SearchThread[num_threads - 1];
+
+    for (int i = 1; i < thread_num; ++i) {
+        get_thread(i)->thread_id = i;
     }
     clear_threads();
     get_ready();
 }
 
 void init_threads() {
-    search_threads = (SearchThread*) malloc((num_threads - 1) * sizeof(SearchThread));
+    search_threads = new SearchThread[num_threads - 1];
 
     for (int i = 0; i < num_threads; ++i) {
-        SearchThread *t = get_thread(i);
-        t->thread_id = i;
+        get_thread(i)->thread_id = i;
     }
     clear_threads();
 }

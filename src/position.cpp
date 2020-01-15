@@ -23,6 +23,33 @@
 #include "move_utils.h"
 #include "move.h"
 
+void init_castling_rights(Position *p) {
+    // black_queenside | black_kingside | white_queenside | white_kingside
+    for (Square sq = A1; sq <= H8; ++sq) {
+        if (sq == p->initial_rooks[black][QUEENSIDE]) {
+            // Black queenside
+            p->CASTLING_RIGHTS[sq] = 7;
+        } else if (sq == p->initial_rooks[black][KINGSIDE]) {
+            // Black kingside
+            p->CASTLING_RIGHTS[sq] = 11;
+        } else if (sq == p->king_index[black]) {
+            // Black both
+            p->CASTLING_RIGHTS[sq] = 3;
+        } else if (sq == p->initial_rooks[white][QUEENSIDE]) {
+            // White queenside
+            p->CASTLING_RIGHTS[sq] = 13;
+        } else if (sq == p->initial_rooks[white][KINGSIDE]) {
+            // White kingside
+            p->CASTLING_RIGHTS[sq] = 14;
+        } else if (sq == p->king_index[white]) {
+            // White both
+            p->CASTLING_RIGHTS[sq] = 12;
+        } else {
+            p->CASTLING_RIGHTS[sq] = 15;
+        }
+    }
+}
+
 void calculate_score(Position *p) {
     p->score = Score{0, 0};
     Bitboard board = p->board;
@@ -41,19 +68,19 @@ void calculate_hash(Position *p) {
     while(board) {
         Square square = pop(&board);
         Piece piece = p->pieces[square];
-        uint64_t hash = polyglotArray[polyglotPieces[piece] + square];
+        uint64_t hash = hash_combined[piece][square];
         info->hash ^= hash;
         if (is_pawn(piece)) {
             info->pawn_hash ^= hash;
         }
     }
 
-    info->hash ^= castlingHash[info->castling];
+    info->hash ^= castling_hash[info->castling];
     if (info->enpassant != no_sq) {
-        info->hash ^= polyglotEnpassant[file_of(info->enpassant)];
+        info->hash ^= enpassant_hash[file_of(info->enpassant)];
     }
     if (p->color == white) {
-        info->hash ^= polyglotWhite;
+        info->hash ^= white_hash;
     }
 }
 
@@ -180,7 +207,7 @@ Position* import_fen(std::string fen, int thread_id){
 
     int sq = A8;
     for(char& c : matches[0]) {
-        Piece piece = (Piece) 32;
+        Piece piece = no_piece;
         switch(c) {
         case 'P':
             piece = white_pawn;
@@ -227,33 +254,48 @@ Position* import_fen(std::string fen, int thread_id){
         case '5': case '6': case '7': case '8':
             sq += c - '0';
         }
-        if (piece != 32) {
+        if (piece != no_piece) {
             p->pieces[sq] = piece;
             p->bbs[piece] |= bfi[sq];
             p->bbs[piece_color(piece)] |= bfi[sq++];
         }
-        
     }
 
     info->castling = 0;
+
+    p->initial_rooks[white][QUEENSIDE] = A1;
+    p->initial_rooks[white][KINGSIDE] = H1;
+    p->initial_rooks[black][QUEENSIDE] = A8;
+    p->initial_rooks[black][KINGSIDE] = H8;
+
     for(char& c : matches[2]) {
-        switch(c) {
-        case 'K':
-            info->castling |= 1;
-            break;
-        case 'Q':
-            info->castling |= 2;
-            break;
-        case 'k':
-            info->castling |= 4;
-            break;
-        case 'q':
-            info->castling |= 8;
-            break;
-        case '-':
-            break;
+        if (c == 'K') {
+            info->castling |= can_king_castle_mask[white];
+        } else if (c == 'Q') {
+            info->castling |= can_queen_castle_mask[white];
+        } else if (c == 'k') {
+            info->castling |= can_king_castle_mask[black];
+        } else if (c == 'q') {
+            info->castling |= can_queen_castle_mask[black];
+        } else if (c != '-') {
+            // Castling rights for Chess960
+            Color castling_color = c >= 'a' ? black : white;
+            Square rook_sq = (Square) (c - (castling_color == white ? 'A' : 'a'));
+            rook_sq = relative_square(rook_sq, castling_color);
+            if (p->pieces[rook_sq] != rook(castling_color)) {
+                continue;
+            }
+
+            if (rook_sq < p->king_index[castling_color]) {
+                info->castling |= can_queen_castle_mask[castling_color];
+                p->initial_rooks[castling_color][QUEENSIDE] = rook_sq;
+            } else {
+                info->castling |= can_king_castle_mask[castling_color];
+                p->initial_rooks[castling_color][KINGSIDE] = rook_sq;
+            }
         }
     }
+    init_castling_rights(p);
 
     if (matches[3][0] != '-') {
         info->enpassant = (Square)(((matches[3][1] - '1') << 3) + matches[3][0] - 'a');
@@ -316,10 +358,18 @@ Position* start_pos(){
     p->bbs[black_pawn] = black_pawns_bb;
     p->bbs[black_king] = black_king_bb;
     p->bbs[black_queen] = black_queen_bb;
-    
-    p->board = black_occupied_bb | white_occupied_bb;
+
+    p->initial_rooks[white][QUEENSIDE] = A1;
+    p->initial_rooks[white][KINGSIDE] = H1;
+
+    p->initial_rooks[black][QUEENSIDE] = A8;
+    p->initial_rooks[black][KINGSIDE] = H8;
+
     p->king_index[white] = E1;
     p->king_index[black] = E8;
+    init_castling_rights(p);
+
+    p->board = black_occupied_bb | white_occupied_bb;
     add_pieces(p);
     p->color = white;
     info->castling = 15;

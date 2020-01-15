@@ -24,7 +24,7 @@
 #include "data.h"
 #include "bitboard.h"
 
-std::string move_to_str(Move m);
+std::string move_to_str(Position *p, Move m);
 std::string i2n(int i);
 std::string int_to_notation(int a);
 

@@ -41,14 +41,11 @@ extern Bitboard KING_EXTENDED_MASKS[2][64];
 extern Bitboard bfi[65];
 extern Bitboard bfi_queen_castle[2];
 extern Bitboard bfi_king_castle[2];
-extern Bitboard KING_CASTLE_MASK[2];
-extern Bitboard KING_CASTLE_MASK_THREAT[2];
-extern Bitboard QUEEN_CASTLE_MASK[2];
-extern Bitboard QUEEN_CASTLE_MASK_THREAT[2];
 extern Bitboard PAWN_ADVANCE_MASK_1[64][2];
 extern Bitboard PAWN_ADVANCE_MASK_2[64][2];
 extern Bitboard PAWN_CAPTURE_MASK[64][2];
 extern Bitboard BETWEEN_MASK[64][64];
+extern Bitboard BETWEEN_MASK_INCLUSIVE[64][64];
 extern Bitboard FROMTO_MASK[64][64];
 extern Bitboard PASSED_PAWN_MASK[64][2];
 extern Bitboard FRONT_MASK[64][2];
@@ -57,12 +54,10 @@ extern Bitboard DISTANCE_RING[64][8];
 extern Bitboard FRONT_RANK_MASKS[64][8];
 
 extern Square ENPASSANT_INDEX[64];
-extern uint64_t castlingHash[16];
+extern uint64_t castling_hash[16];
 
-extern uint8_t CASTLING_RIGHTS[64];
-extern uint8_t ROOK_MOVES_CASTLE_FROM[64];
-extern uint8_t ROOK_MOVES_CASTLE_TO[64];
-extern uint8_t ROOK_MOVES_CASTLE_PIECE[64];
+extern int CASTLE_TYPE[64];
+extern Square ROOK_MOVES_CASTLE_TO[64];
 
 void init();
 void init_imbalance();
@@ -89,6 +84,7 @@ inline SearchThread *get_thread(int thread_id) { return thread_id == 0 ? &main_t
 
 extern int num_threads;
 extern int move_overhead;
+extern bool chess960;
 
 inline void initialize_nodes() {
     for (int i = 0; i < num_threads; ++i) {
@@ -163,7 +159,6 @@ inline int distance(Square s1, Square s2) {
     return std::max(col_distance, row_distance);
 }
 
-inline Square mirror_square(Square s, Color color) {return s ^ (color * H8);}
 inline Square relative_square(Square s, Color color) {return s ^ (color * A8);}
 
 inline Square pawn_forward(Square s, Color color) {return color == white ? s + 8 : s - 8;}
@@ -198,6 +193,9 @@ inline Piece get_promotion_piece(Move m, Color c){
     return white_queen + c;
 }
 
-extern uint64_t polyglotCombined[NUM_PIECE][64];
+extern uint64_t castling_hash[16];
+extern uint64_t enpassant_hash[8];
+extern uint64_t white_hash;
+extern uint64_t hash_combined[NUM_PIECE][64];
 
 #endif

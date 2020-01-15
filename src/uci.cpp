@@ -67,7 +67,10 @@ Move uci2move(Position *p, string s) {
         } else if (to == p->info->enpassant) {
             type = ENPASSANT;
         }
-    } else if (is_king(piece) && std::abs(from - to) == 2) {
+    } else if (is_king(piece) && (std::abs(from - to) == 2 || (bfi[to] & p->bbs[rook(p->color)]))) {
+        if (bfi[to] & p->bbs[rook(p->color)]) {
+            to = to > from ? relative_square(G1, p->color) : relative_square(C1, p->color);
+        }
         type = CASTLING;
     }
     return _movecast(from, to, type);
@@ -80,14 +83,13 @@ bool word_equal(int index, string comparison_str) {
 }
 
 void uci() {
-    cout << "id name Defenchess 2.2 x64" << endl << "id author Can Cetin & Dogac Eldenk" << endl;
-#ifndef NDEBUG
-    cout << "debug mode on" << std::endl;
-#endif
-    cout << "option name Hash type spin default 16 min 1 max 16384" << endl;
+    cout << "id name Defenchess 2.3 x64" << endl << "id author Can Cetin & Dogac Eldenk" << endl;
+    cout << "option name Hash type spin default 16 min 1 max 65536" << endl;
     cout << "option name Threads type spin default 1 min 1 max " << MAX_THREADS << endl;
     cout << "option name SyzygyPath type string default <empty>" << endl;
     cout << "option name MoveOverhead type spin default 100 min 0 max 5000" << endl;
+    cout << "option name Ponder type check default false" << endl;
+    cout << "option name UCI_Chess960 type check default false" << endl;
     cout << "uciok" << endl;
 }
 
@@ -106,7 +108,7 @@ void debug() {
     MoveGen movegen = new_movegen(root_position, md, no_move, NORMAL_SEARCH, 0, is_checked(root_position));
     Move move;
     while ((move = next_move(&movegen, md, 0)) != no_move) {
-        cout << move_to_str(move) << " ";
+        cout << move_to_str(root_position, move) << " ";
     }
     cout << endl;
 }
@@ -117,11 +119,13 @@ void quit() {
     }
 
     is_timeout = true;
+    is_pondering = false;
     quit_application = true;
 }
 
 void stop() {
     is_timeout = true;
+    is_pondering = false;
 }
 
 void isready() {
@@ -209,48 +213,38 @@ void cmd_position() {
     get_ready();
 }
 
+void option(string name, string value) {
+    if (name == "Hash") {
+        int mb = stoi(value);
+        if (!mb || more_than_one(uint64_t(mb))) {
+            cout << "info Hash value needs to be a power of 2!" << endl;
+        }
+        reset_tt(mb);
+    } else if (name == "Threads") {
+        reset_threads(std::min(MAX_THREADS, std::max(1, stoi(value))));
+    } else if (name == "SyzygyPath") {
+        init_syzygy(value);
+    } else if (name == "MoveOverhead") {
+        move_overhead = stoi(value);
+    } else if (name == "UCI_Chess960") {
+        chess960 = value == "true";
+    }
+}
+
 void setoption() {
     if (word_list[1] != "name" || word_list[3] != "value") {
         return;
     }
     string name = word_list[2];
     string value = word_list[4];
-
-    if (name == "Hash") {
-        int mb = stoi(value);
-        if (!mb || more_than_one(uint64_t(mb))) {
-            cout << "info Hash value needs to be a power of 2!" << endl;
-        }
-        reset_tt(mb);
-    } else if (name == "Threads") {
-        num_threads = std::min(MAX_THREADS, stoi(value));
-        reset_threads();
-    } else if (name == "SyzygyPath") {
-        init_syzygy(value);
-    } else if (name == "MoveOverhead") {
-        move_overhead = stoi(value);
-    }
+    option(name, value);
 }
 
 void so() {
     // Quick set option without name and value
     string name = word_list[1];
     string value = word_list[2];
-
-    if (name == "Hash") {
-        int mb = stoi(value);
-        if (!mb || more_than_one(uint64_t(mb))) {
-            cout << "info Hash value needs to be a power of 2!" << endl;
-        }
-        reset_tt(mb);
-    } else if (name == "Threads") {
-        num_threads = std::min(MAX_THREADS, stoi(value));
-        reset_threads();
-    } else if (name == "SyzygyPath") {
-        init_syzygy(value);
-    } else if (name == "MoveOverhead") {
-        move_overhead = stoi(value);
-    }
+    option(name, value);
 }
 
 void ucinewgame() {
@@ -260,6 +254,10 @@ void ucinewgame() {
 
 void eval() {
     cout << evaluate(root_position) << endl;
+}
+
+void ponderhit() {
+    is_pondering = false;
 }
 
 void run_command(string s) {
@@ -293,6 +291,8 @@ void run_command(string s) {
         undo();
     if (s == "eval")
         eval();
+    if (s == "ponderhit")
+        ponderhit();
 #ifdef __TUNE__
     if (s == "tune")
         tune();
@@ -300,7 +300,7 @@ void run_command(string s) {
 }
 
 void loop() {
-    cout << "Defenchess 2.2 x64 by Can Cetin and Dogac Eldenk" << endl;
+    cout << "Defenchess 2.3 x64 by Can Cetin and Dogac Eldenk" << endl;
 
     string in_str;
 #ifdef __TUNE__

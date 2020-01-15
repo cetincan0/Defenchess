@@ -144,7 +144,7 @@ Bitboard can_go_to(Position *p, Color color, Square index) {
            pawn_targets;
 }
 
-Bitboard color_targets(Position *p, Color color) {
+Bitboard color_targets(Position *p, Bitboard board, Color color) {
     Bitboard final_board = 0;
 
     Bitboard bbs = p->bbs[knight(color)];
@@ -156,19 +156,19 @@ Bitboard color_targets(Position *p, Color color) {
     bbs = p->bbs[rook(color)];
     while (bbs) {
         Square sq = pop(&bbs);
-        final_board |= generate_rook_targets(p->board, sq);
+        final_board |= generate_rook_targets(board, sq);
     }
 
     bbs = p->bbs[bishop(color)];
     while (bbs) {
         Square sq = pop(&bbs);
-        final_board |= generate_bishop_targets(p->board, sq);
+        final_board |= generate_bishop_targets(board, sq);
     }
 
     bbs = p->bbs[queen(color)];
     while (bbs) {
         Square sq = pop(&bbs);
-        final_board |= generate_queen_targets(p->board, sq);
+        final_board |= generate_queen_targets(board, sq);
     }
 
     final_board |= generate_king_targets(p->king_index[color]);
