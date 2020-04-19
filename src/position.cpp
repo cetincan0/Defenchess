@@ -169,7 +169,7 @@ Position* import_fen(std::string fen, int thread_id){
 
     int halfmove_clock;
     if (matches[5] != "") {
-        halfmove_clock = stoi(matches[5]);
+        halfmove_clock = std::max(1, stoi(matches[5]));
     } else {
         halfmove_clock = 1;
     }

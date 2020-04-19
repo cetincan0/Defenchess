@@ -750,6 +750,11 @@ void thread_think(SearchThread *my_thread, bool in_check) {
             }
         }
     }
+
+    // If the main thread finishes searching, stop all the other ones.
+    if (is_main) {
+        is_timeout = true;
+    }
 }
 
 void think(Position *p, std::vector<std::string> word_list) {
